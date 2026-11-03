@@ -540,7 +540,10 @@ body.d-page a:hover { text-decoration: none; }
 }
 .d-faq__item summary::-webkit-details-marker { display: none; }
 .d-faq__item summary img { width: 24px; height: 24px; flex-shrink: 0; transition: transform .2s ease; }
-.d-faq__item[open] summary img { transform: rotate(180deg); }
+.d-faq__item[open]:not(.is-closing) summary img { transform: rotate(180deg); }
+.d-faq__item summary img { transition: transform .3s cubic-bezier(.2,.7,.2,1); }
+.d-faq__item { transition: border-color .2s ease; }
+.d-faq__item[open]:not(.is-closing) { border-color: var(--d-navy); }
 .d-faq__answer { padding: 0 24px 24px; display: flex; flex-direction: column; gap: 12px; }
 .d-faq__answer p { font-size: 16px; line-height: 24px; font-weight: 500; color: var(--d-sub); }
 .d-faq__answer a { color: var(--d-sea); }
@@ -725,12 +728,17 @@ body.d-page a:hover { text-decoration: none; }
 
 /* ── Motion ───────────────────────────────────────────────── */
 /* Scroll reveal: only once JS has marked the page ready, so nothing stays hidden without JS */
+/* The transition lives on .is-in only, so hiding on load is instant
+   (no visible fade-out) and only the reveal itself animates. */
 .d-reveal-ready .d-reveal {
   opacity: 0;
   transform: translateY(28px);
+}
+.d-reveal-ready .d-reveal.is-in {
+  opacity: 1;
+  transform: none;
   transition: opacity .7s cubic-bezier(.2,.7,.2,1), transform .7s cubic-bezier(.2,.7,.2,1);
 }
-.d-reveal-ready .d-reveal.is-in { opacity: 1; transform: none; }
 
 /* Hero entrance */
 @keyframes d-rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
@@ -765,14 +773,49 @@ body.d-page a:hover { text-decoration: none; }
 }
 .d-pkg { overflow: hidden; }
 .d-pkg__img { transition: transform .5s ease; }
-.d-faq__answer { animation: d-rise .3s ease both; }
 
 @media (prefers-reduced-motion: reduce) {
   .d-reveal-ready .d-reveal { opacity: 1; transform: none; }
 }
 
-/* Mobile bar sits above the teal footer strip */
-body.d-page .mobile-bar { z-index: 150; }
+/* The floating Book Now replaces the old white mobile bar */
+body.d-page .mobile-bar { display: none; }
+body.d-page { padding-bottom: 0; }
+
+/* Floating Book Now: parked below the viewport, slides up when .is-visible */
+.d-fab {
+  position: fixed;
+  left: 50%;
+  bottom: calc(24px + env(safe-area-inset-bottom));
+  z-index: 150; /* under the nav menu and the booking modal */
+  border-radius: 999px;
+  transform: translate(-50%, calc(100% + 48px));
+  visibility: hidden;
+  transition: transform .45s cubic-bezier(.55,0,.75,.3), visibility 0s linear .45s;
+}
+.d-fab.is-visible {
+  transform: translate(-50%, 0);
+  visibility: visible;
+  transition: transform .6s cubic-bezier(.22,1,.36,1), visibility 0s;
+}
+.d-fab__btn {
+  min-width: 181px;
+  height: 46px;
+  padding: 0 30px 0 40px;
+  gap: 14px;
+  border: none;
+  font-weight: 500;
+  font-size: 16px;
+  line-height: 20px;
+  box-shadow: 0 10px 28px -8px rgba(3,29,47,.45);
+}
+.d-fab__btn svg { width: 24px; height: 24px; flex-shrink: 0; transition: transform .2s ease; }
+.d-fab__btn:hover svg { transform: translateX(4px); }
+.d-fab__btn:active { transform: scale(.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .d-fab, .d-fab.is-visible { transition: none; }
+}
 
 /* ── 16. Responsive ───────────────────────────────────────── */
 @media (max-width: 1280px) {
@@ -819,6 +862,7 @@ body.d-page .mobile-bar { z-index: 150; }
   .d-tabs { gap: 12px; }
   .d-tab { padding: 14px; }
   .d-feed .d-feed__item { width: 70%; }
+  .d-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
   #beholdGalleryGrid:not([hidden]) { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .d-review { padding: 28px; }
   .d-review p { font-size: 17px; }
@@ -826,34 +870,180 @@ body.d-page .mobile-bar { z-index: 150; }
   .d-footer__bottom { flex-direction: column; align-items: flex-start; margin-top: 56px; }
 }
 
+/* ── Phone: Figma "Mobile" frame (390px) ─────────────────────
+   20px gutters for content, 8px gutters for the full-bleed cards,
+   80px between sections, 48/56 section titles. */
 @media (max-width: 640px) {
-  .d-footer { padding: 0 12px 12px; }
-  .d-footer__card { padding-inline: 24px; border-radius: 24px; }
-  .d-footer__top { grid-template-columns: 1fr; row-gap: 40px; }
-  .d-footer__top > .d-footer__col, .d-footer__right { grid-column: 1; }
-  .d-footer__logo { justify-content: flex-start; }
-  .d-footer__logo img { width: 200px; }
-  .d-pkg-grid { grid-template-columns: 1fr; }
-  .d-pkg__img { height: 240px; }
-  .d-nav__book { padding: 10px 14px; }
-  .d-nav__book img { display: none; }
-  .d-nav__menu { padding-left: 12px; }
-  .d-nav__menu span { display: none; }
-  .d-nav__menu-panel { grid-template-columns: 1fr; }
-  .d-hero { height: 760px; }
-  /* No room for the overlap effect: keep text readable over the photo */
-  .d-hero__rider { display: none; }
-  .d-hero__bg { object-position: 68% center; }
-  .d-hero::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(to bottom, rgba(3,29,47,.35), rgba(3,29,47,.1) 45%, rgba(3,29,47,.45));
-    z-index: -1;
+  :root {
+    --d-section: 80px;
+    --d-title-size: 48px;
+    --d-hero-size: 64px;
   }
-  .d-hero__content { width: calc(100% - 40px); padding-top: 120px; }
-  .d-actions__row { gap: 12px; }
-  .d-experience .d-row { flex-direction: column; align-items: stretch; }
+  .d-wrap { width: calc(100% - 40px); }
+  .d-wide { width: calc(100% - 16px); }
+  .d-title { line-height: 56px; }
+  .d-head { gap: 16px; margin-bottom: 32px; }
+  .d-head__sub, .d-head--top .d-head__sub { padding: 0; font-size: 16px; line-height: 24px; }
+  .d-arrows { justify-content: space-between; width: 100%; }
+  .d-arrow { width: 80px; height: 50px; border-radius: 32px; }
+  .d-arrow img { width: 16px; height: 16px; }
+  .d-video__play { padding: 16px; }
+  .d-video__play img { width: 16px; height: 16px; }
+
+  /* Nav: 350 x 54 pill, 12px from the top */
+  .d-nav { top: 12px; width: calc(100% - 40px); }
+  .d-nav__pill { height: 54px; padding: 12px; }
+  .d-nav__menu { gap: 8px; padding-left: 12px; font-size: 12px; line-height: 16px; }
+  .d-nav__menu span { display: inline; }
+  .d-nav__menu img { width: 15px; height: 4px; }
+  .d-nav__logo, .d-nav__logo img { width: 73px; height: 28px; }
+  .d-nav__book { height: 30px; padding: 7px 13px; font-size: 12px; line-height: 16px; }
+  .d-nav__book img { display: none; }
+  .d-nav__menu-panel { grid-template-columns: 1fr; border-radius: 20px; }
+
+  /* Hero: 980px tall, copy starts 126px down */
+  .d-hero { height: 980px; }
+  .d-hero__rider { display: none; }
+  .d-hero__bg { object-position: 42% center; }
+  .d-hero::after { content: none; }
+  .d-hero__content { width: calc(100% - 40px); padding-top: 126px; }
+  /* Narrow measure so "Open water." breaks onto two lines, as in the design */
+  .d-hero__title { font-size: 64px; line-height: 72px; max-width: 300px; }
+  .d-cta .d-hero__title { max-width: none; }
+  .d-hero__sub { max-width: 163px; font-size: 12px; line-height: 16px; }
+  .d-hero__meta { flex-direction: column; gap: 12px; margin-top: 24px; font-size: 12px; line-height: 16px; }
+  .d-hero__meta span { gap: 8px; }
+  .d-hero__meta img { width: 16px; height: 16px; }
+  .d-actions { gap: 12px; margin-top: 24px; }
+  .d-actions__row { flex-direction: column; gap: 16px; }
+  .d-actions__row .d-btn { width: 100%; }
+
+  /* Packages */
+  .d-pkg-grid { grid-template-columns: 1fr; gap: 16px; }
+  .d-pkg { border-radius: 16px; }
+  .d-pkg__img { height: 312px; }
+  .d-pkg__body { padding: 0 12px; }
+  .d-pkg__name { font-size: 16px; line-height: 20px; margin-bottom: -12px; }
+  .d-pkg__desc { font-size: 10px; line-height: 16px; }
+  .d-pkg__actions .d-btn--outline { width: 132px; }
+
+  /* Overview: sea card 8px from the edges */
+  .d-overview { --ov-band: 376px; padding-top: 106px; }
+  .d-overview > .d-wrap { width: calc(100% - 16px); }
+  .d-overview__card { border-radius: 20px; padding: 12px; }
+  .d-overview__hero { height: 198px; border-radius: 8px; }
+  .d-overview__hero-text { left: 12px; right: 104px; bottom: 12px; }
+  .d-overview__eyebrow { font-size: 12px; line-height: 16px; letter-spacing: .6px; margin-bottom: 4px; }
+  .d-overview__title { font-size: 32px; line-height: 36px; }
+  .d-overview__play { left: auto; right: 12px; bottom: 12px; width: 80px; height: 56px; }
+  .d-overview__play img { width: 24px; height: 24px; }
+  .d-overview__cols { gap: 24px; padding: 24px 0 0; }
+  .d-overview__cols p { font-size: 12px; line-height: 16px; }
+  .d-overview__arrows { padding-top: 16px; }
+  .d-overview__track { margin-top: 32px; }
+  .d-overview__track .d-video { width: 100%; height: 203px; aspect-ratio: auto; border-radius: 8px; }
+
+  /* Optional extras */
+  .d-extras { gap: 16px; }
+  .d-extra { gap: 16px; padding: 24px; border-radius: 12px; }
+  .d-extra__top { flex-direction: column; gap: 12px; }
+  .d-extra__top h3 { font-size: 20px; line-height: 24px; }
+  .d-extra .d-price--sm strong { font-size: 20px; line-height: 24px; }
+  .d-extra p { font-size: 12px; line-height: 16px; color: var(--d-sub); }
+  .d-extras__link { min-height: 38px; padding: 8px 16px; gap: 40px; font-size: 14px; line-height: 16px; }
+  .d-extras__link img { width: 20px; height: 20px; }
+
+  /* How to find us */
+  .d-location .d-title { margin-bottom: 32px; }
+  .d-map { height: 400px; border-radius: 12px; }
+  .d-location__bars { gap: 16px; margin-top: 24px; }
+  .d-bar { padding: 15px 16px; border-radius: 12px; font-size: 12px; line-height: 16px; }
+  .d-bar img { width: 16px; height: 16px; }
+  .d-bar span { text-align: right; flex: 1; }
+  .d-steps { gap: 16px; margin-top: 32px; }
+  .d-steps li { gap: 16px; }
+  .d-steps__num { width: 48px; height: 42px; border-radius: 20px; font-size: 12px; }
+  .d-steps p { font-size: 12px; line-height: 16px; }
+
+  /* FAQ: white card, navy band stops 124px above its bottom */
+  .d-dark { padding-bottom: 0; }
+  .d-faq {
+    padding-top: 80px;
+    background: linear-gradient(to bottom, var(--d-navy) calc(100% - 124px), var(--d-bg) calc(100% - 124px));
+  }
+  .d-faq__card { border-radius: 20px; padding: 32px; }
+  .d-faq__card .d-title { margin-bottom: 32px; }
+  .d-faq__grid { gap: 16px; }
+  .d-faq__item { border-radius: 12px; }
+  .d-faq__item summary { padding: 16px; font-size: 16px; line-height: 20px; }
+  .d-faq__item summary img { width: 20px; height: 20px; }
+  .d-faq__answer { padding: 0 16px 16px; }
+  .d-faq__answer p { font-size: 14px; line-height: 20px; }
+
+  /* Meet the kids */
+  .d-kids__text { gap: 16px; }
+  .d-kids__text .d-title { margin-bottom: 32px; }
+  .d-body { font-size: 12px; line-height: 16px; color: var(--d-muted); }
+  .d-kids__videos { gap: 16px; margin-top: 32px; }
+  .d-kids__videos .d-video { aspect-ratio: auto; height: 203px; }
+
+  /* More from the experience */
+  .d-experience .d-head__sub { font-size: 12px; line-height: 18px; }
+  .d-experience__track { padding-inline: 20px; scroll-padding-inline: 20px; }
+  .d-experience__track .d-video { width: calc(100vw - 40px); height: 203px; aspect-ratio: auto; }
+  .d-experience .d-row { flex-direction: column; align-items: stretch; gap: 16px; margin-top: 16px; }
   .d-experience__book { width: 100%; }
-  .d-panel .d-row { flex-direction: column; align-items: flex-start; }
+
+  /* Navy panel: Instagram + reviews */
+  .d-panel { --d-pad: 32px; border-radius: 20px; padding: 32px 0; }
+  .d-head--panel, .d-head--top, .d-reviews .d-head { gap: 32px; }
+  .d-head--panel { margin-bottom: 32px; }
+  #reels .d-title { max-width: 250px; }
+  .d-tabs { gap: 16px; }
+  .d-tab { padding: 16px; border-radius: 12px; }
+  .d-tab svg { width: 24px; height: 24px; }
+  .d-feed .d-feed__item { width: 100%; aspect-ratio: 310 / 551; border-radius: 8px; }
+  #beholdGalleryGrid:not([hidden]) { grid-template-columns: repeat(2, 1fr); gap: 12px; }
+  #beholdGalleryGrid .d-feed__item { aspect-ratio: 1; }
+  .d-panel .d-row { flex-direction: column; align-items: stretch; gap: 24px; margin-top: 24px; }
+  .d-panel .d-row .d-btn { width: 100%; }
+  .d-reviews .d-head { margin-bottom: 24px; }
+  .d-reviews .d-head__sub { font-size: 12px; line-height: 16px; }
+  .d-reviews__track { gap: 16px; }
+  .d-review { width: calc(100vw - 80px); gap: 16px; padding: 24px; border-radius: 12px; }
+  .d-review__top { justify-content: flex-start; gap: 16px; }
+  .d-review__person img { width: 72px; height: 56px; }
+  .d-review__person strong { font-size: 12px; line-height: 16px; }
+  .d-review__person span { font-size: 10px; line-height: 16px; }
+  .d-review p { font-size: 16px; line-height: 20px; }
+  .d-reviews .d-arrows { margin-top: 24px; }
+
+  /* CTA: the 1392px-wide photo starts behind the reviews panel */
+  .d-cta {
+    height: 1739px;
+    margin-top: -586px;
+    padding: 666px 0 0;
+    background-color: var(--d-bg);
+    background-size: 1392px auto;
+    background-position: -330px 0;
+  }
+  .d-cta__content { width: calc(100% - 40px); margin: 0 auto; }
+  .d-cta .d-hero__sub, .d-cta .d-listed { text-shadow: none; }
+  .d-cta .d-hero__sub { max-width: none; }
+  .d-cta .d-actions { margin-top: 24px; }
+
+  /* Footer: navy card on the sea strip */
+  .d-footer {
+    margin-top: -159px;
+    padding: 0 8px 8px;
+    background: linear-gradient(to bottom, transparent 94px, var(--d-sea) 94px);
+  }
+  .d-footer__card { padding: 80px 32px 32px; border-radius: 20px; }
+  .d-footer__top { grid-template-columns: 1fr 1fr; column-gap: 24px; row-gap: 48px; }
+  .d-footer__logo { grid-column: 1 / -1; grid-row: 1; justify-content: center; margin: 0 0 -8px; }
+  .d-footer__logo img { width: 220px; }
+  .d-footer__top > .d-footer__col { grid-column: 1 / -1; }
+  .d-footer__right { grid-column: 1 / -1; grid-template-columns: 1fr 1fr; column-gap: 24px; }
+  .d-footer__links--2 { column-gap: 24px; }
+  .d-footer__bottom { flex-direction: row; align-items: center; margin-top: 66px; }
 }

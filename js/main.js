@@ -218,13 +218,50 @@ function updateFooterTotal() {
   document.getElementById('footerTotalAmount').textContent = formatMoney(t);
 }
 
+const BK_ARROW = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12h18m-5-5 5 5-5 5"/></svg>';
+
 /* ── Step renderer ──────────────────────────────────────── */
+/* ── Step transitions ──────────────────────────────────────
+   Call before swapping content: it measures the modal, then (after the
+   synchronous re-render) glides the height and fades the new step in.
+   dir 1 = forward (enters from the right), -1 = back (from the left). */
+let bkLastStep = 0;
+function bkAnimateSwap(dir) {
+  const modal   = document.getElementById('bookingModal');
+  const panelEl = document.getElementById('modalPanel');
+  if (!modal || !panelEl || !modal.classList.contains('is-open')) return;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  panelEl.getAnimations().forEach(a => { if (a.id === 'bkHeight') a.cancel(); });
+  const prevH = panelEl.getBoundingClientRect().height;
+  const EASE  = 'cubic-bezier(.2,.7,.2,1)';
+  queueMicrotask(() => {
+    const newH = panelEl.getBoundingClientRect().height;
+    if (Math.abs(newH - prevH) > 2) {
+      const h = panelEl.animate([{ height: prevH + 'px' }, { height: newH + 'px' }], { duration: 340, easing: EASE });
+      h.id = 'bkHeight';
+    }
+    const x = dir * 20;
+    [['modalStepCounter', 0], ['modalStepTitle', 30], ['modalBody', 70]].forEach(([id, delay]) => {
+      const el = document.getElementById(id);
+      if (!el || el.offsetParent === null) return;
+      el.getAnimations().forEach(a => a.cancel());
+      el.animate(
+        [{ opacity: 0, transform: `translateX(${x}px)` }, { opacity: 1, transform: 'none' }],
+        { duration: 380, delay, easing: EASE, fill: 'backwards' }
+      );
+    });
+  });
+}
+
 function renderStep(step) {
   const body    = document.getElementById('modalBody');
   const backBtn = document.getElementById('backBtn');
   const nextBtn = document.getElementById('nextBtn');
   const header  = document.getElementById('modalHeader');
   const footer  = document.getElementById('modalFooter');
+
+  bkAnimateSwap(step >= bkLastStep ? 1 : -1);
+  bkLastStep = step;
 
   header.style.display = '';
   footer.style.display = '';
@@ -235,19 +272,50 @@ function renderStep(step) {
   backBtn.style.display = step > 1 ? '' : 'none';
 
   switch (step) {
-    case 1: renderStep1(body); nextBtn.textContent = 'Continue →'; break;
-    case 2: renderStep2(body); nextBtn.textContent = 'Continue →'; break;
-    case 3: renderStep3(body); nextBtn.textContent = 'Continue →'; break;
-    case 4: renderStep4(body); nextBtn.textContent = 'Continue →'; break;
-    case 5: renderStep5(body); nextBtn.textContent = 'Continue →'; break;
-    case 6: renderStep6(body); nextBtn.textContent = 'Continue →'; break;
-    case 7: renderStep7(body); nextBtn.textContent = 'Confirm Booking'; break;
+    case 1: renderStep1(body); break;
+    case 2: renderStep2(body); break;
+    case 3: renderStep3(body); break;
+    case 4: renderStep4(body); break;
+    case 5: renderStep5(body); break;
+    case 6: renderStep6(body); break;
+    case 7: renderStep7(body); break;
   }
+  // Steps can set defaults while rendering (e.g. Summaz starts at 1 rider), so total again after
+  updateFooterTotal();
+  nextBtn.innerHTML = `<span>${step === 7 ? 'Confirm Booking' : 'Continue'}</span>${BK_ARROW}`;
+  document.getElementById('modalPanel').dataset.step = step;
 
   body.scrollTop = 0;
 }
 
 /* ── Step 1: Guest count (context-aware) ─────────────────── */
+function bkStepper(o) {
+  return `
+    <div class="bk-counter">
+      <div class="bk-counter__info">
+        <p class="bk-counter__name">${o.name}</p>
+        <p class="bk-counter__sub">${o.sub}</p>
+      </div>
+      <div class="bk-stepper">
+        <button type="button" class="bk-stepper__btn" id="${o.minusId}" onclick="${o.minus}" aria-label="Remove one: ${o.name}" ${o.minDisabled ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+        <span class="bk-stepper__count" id="${o.countId}" aria-live="polite">${o.count}</span>
+        <button type="button" class="bk-stepper__btn" ${o.plusId ? `id="${o.plusId}"` : ''} onclick="${o.plus}" aria-label="Add one: ${o.name}" ${o.maxDisabled ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button>
+      </div>
+    </div>`;
+}
+
+function bkSummary(rows) {
+  return `
+    <p class="bk-label">Summary</p>
+    <div class="bk-box price-summary">
+      <div class="price-summary__rows" id="bkSummaryRows">${rows}</div>
+      <div class="price-summary__total">
+        <span class="price-summary__total-label">Total</span>
+        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
+      </div>
+    </div>`;
+}
+
 function renderStep1(body) {
   if (!state.selectedPackage) {
     renderStep1PackagePicker(body);
@@ -270,32 +338,13 @@ function renderStep1BigMable(body) {
   const total = state.bigMableCount * BIG_MABLE_PRICE;
   body.innerHTML = `
     <p class="step-sub">2 to 6 riders per ride. Ages 7 and up. $45 per person. 600 lb combined weight limit.</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">Big Mable Tube Ride</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Riders <span class="stepper-row__label-price">$${BIG_MABLE_PRICE} each</span></p>
-          <p class="stepper-row__price">Ages 7+ &middot; max 6 per ride</p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="bigMableMinus" onclick="changeCount('bigMableCount',-1)" ${state.bigMableCount === 0 ? 'disabled' : ''}>−</button>
-          <span class="stepper__count" id="bigMableCount">${state.bigMableCount}</span>
-          <button class="stepper__btn" id="bigMablePlus" onclick="changeCount('bigMableCount',1)" ${state.bigMableCount >= 6 ? 'disabled' : ''}>+</button>
-        </div>
-      </div>
-    </div>
-    <div class="price-summary">
-      <div class="price-summary__rows">
+    <p class="bk-label">Big Mable Tube Ride</p>
+    ${bkStepper({ name: 'Riders', sub: `$${BIG_MABLE_PRICE} each · Ages 7+ · max 6 per ride`, minusId: 'bigMableMinus', plusId: 'bigMablePlus', countId: 'bigMableCount', minus: "changeCount('bigMableCount',-1)", plus: "changeCount('bigMableCount',1)", count: state.bigMableCount, minDisabled: state.bigMableCount === 0, maxDisabled: state.bigMableCount >= 6 })}
+    ${bkSummary(`
         <div class="price-summary__row ${state.bigMableCount === 0 ? 'is-hidden' : ''}" id="bigMableSummaryRow">
           <span><span id="bigMableCount2">${state.bigMableCount}</span> x Big Mable Tube Ride</span>
           <strong id="bigMableSummaryAmt">${formatMoney(total)}</strong>
-        </div>
-      </div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
-      </div>
-    </div>
+        </div>`)}
   `;
 }
 
@@ -304,31 +353,13 @@ function renderStep1Summaz(body) {
   const price = state.summazCount === 2 ? SUMMAZ_PRICE_2 : SUMMAZ_PRICE_1;
   body.innerHTML = `
     <p class="step-sub">A private jet ski stunt ride with Summaz. 1 or 2 riders. Total price is fixed per booking, not per person.</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">The Summaz Experience</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Riders <span class="stepper-row__label-price">1 rider $200 &middot; 2 riders $275</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="summazMinus" onclick="changeSummazCount(-1)" ${state.summazCount <= 1 ? 'disabled' : ''}>−</button>
-          <span class="stepper__count" id="summazCountEl">${state.summazCount}</span>
-          <button class="stepper__btn" id="summazPlus" onclick="changeSummazCount(1)" ${state.summazCount >= 2 ? 'disabled' : ''}>+</button>
-        </div>
-      </div>
-    </div>
-    <div class="price-summary">
-      <div class="price-summary__rows">
+    <p class="bk-label">The Summaz Experience</p>
+    ${bkStepper({ name: 'Riders', sub: `1 rider $${SUMMAZ_PRICE_1} · 2 riders $${SUMMAZ_PRICE_2}`, minusId: 'summazMinus', plusId: 'summazPlus', countId: 'summazCountEl', minus: 'changeSummazCount(-1)', plus: 'changeSummazCount(1)', count: state.summazCount, minDisabled: state.summazCount <= 1, maxDisabled: state.summazCount >= 2 })}
+    ${bkSummary(`
         <div class="price-summary__row" id="summazSummaryRow">
           <span>The Summaz Experience &middot; <span id="summazSummaryCount">${state.summazCount}</span> rider${state.summazCount > 1 ? 's' : ''}</span>
           <strong id="summazSummaryAmt">${formatMoney(price)}</strong>
-        </div>
-      </div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(price)}</span>
-      </div>
-    </div>
+        </div>`)}
   `;
 }
 
@@ -356,57 +387,33 @@ function changeSummazCount(delta) {
   updateFooterTotal();
 }
 
+const BK_PICKER = [
+  { group: 'Family Wave Package', items: [
+    { id: 'beachAccess',       name: 'Beach Access Package',               price: 'Adults $75 · Children $60', desc: 'A full beach day at Arawak Cay. Chairs, kayaks, paddleboards, water toys, and snorkels included. Perfect for families and groups of all ages.' },
+    { id: 'beachAccessJetSki', name: 'Beach Access Package + Jet Ski Ride', price: '$150 per person',           desc: 'Everything in the beach day package plus a solo 25-minute jet ski session on open water. Ideal for adults who want more than the beach.' }
+  ]},
+  { group: 'Individuals', items: [
+    { id: 'jetSkiRental', name: 'Jet Ski Rentals',       price: 'From $105 per ride',               desc: 'No beach day required. Just book a solo jet ski session by duration and go. Riders must be 16 or older.' },
+    { id: 'bigMable',     name: 'Big Mable Tube Ride',   price: '$45 per person · 2 to 6 riders',   desc: 'Up to 6 riders on one giant inflatable tube, towed by a jet ski. A 10 to 12 minute group ride. Ages 7 and up.' },
+    { id: 'summaz',       name: 'The Summaz Experience', price: '$200 for 1 rider · $275 for 2 riders', desc: 'A private stunt ride with Summaz, professional jet ski racer. Up to 2 riders. The most talked-about booking in Nassau.' }
+  ]}
+];
+
 function renderStep1PackagePicker(body) {
   body.innerHTML = `
     <p class="step-sub">Not sure which to pick? Tap any option to read the full details, then book from there.</p>
-    <div class="step-pkg-picker">
-      <div class="step-pkg-picker__group">
-        <div class="step-pkg-picker__label">Family Wave Package</div>
-        <button class="step-pkg-card" onclick="selectPackageFromPicker('beachAccess')">
-          <div class="step-pkg-card__left">
-            <div class="step-pkg-card__name">Beach Access Package</div>
-            <div class="step-pkg-card__desc">A full beach day at Arawak Cay. Chairs, kayaks, paddleboards, water toys, and snorkels included. Perfect for families and groups of all ages.</div>
-            <div class="step-pkg-card__price">Adults $75 &middot; Children $60</div>
-          </div>
-          <svg class="step-pkg-card__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        <button class="step-pkg-card" onclick="selectPackageFromPicker('beachAccessJetSki')">
-          <div class="step-pkg-card__left">
-            <div class="step-pkg-card__name">Beach Access Package + Jet Ski Ride</div>
-            <div class="step-pkg-card__desc">Everything in the beach day package plus a solo 25-minute jet ski session on open water. Ideal for adults who want more than the beach.</div>
-            <div class="step-pkg-card__price">Adults $150 per person</div>
-          </div>
-          <svg class="step-pkg-card__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-      <div class="step-pkg-picker__group">
-        <div class="step-pkg-picker__label">Individuals</div>
-        <button class="step-pkg-card" onclick="selectPackageFromPicker('jetSkiRental')">
-          <div class="step-pkg-card__left">
-            <div class="step-pkg-card__name">Jet Ski Rentals</div>
-            <div class="step-pkg-card__desc">No beach day required. Just book a solo jet ski session by duration and go. Riders must be 16 or older.</div>
-            <div class="step-pkg-card__price">From $105 per ride</div>
-          </div>
-          <svg class="step-pkg-card__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        <button class="step-pkg-card" onclick="selectPackageFromPicker('bigMable')">
-          <div class="step-pkg-card__left">
-            <div class="step-pkg-card__name">Big Mable Tube Ride</div>
-            <div class="step-pkg-card__desc">Up to 6 riders on one giant inflatable tube, towed by a jet ski. A 10 to 12 minute group ride. Ages 7 and up.</div>
-            <div class="step-pkg-card__price">$45 per person · 2 to 6 riders</div>
-          </div>
-          <svg class="step-pkg-card__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-        <button class="step-pkg-card" onclick="selectPackageFromPicker('summaz')">
-          <div class="step-pkg-card__left">
-            <div class="step-pkg-card__name">The Summaz Experience</div>
-            <div class="step-pkg-card__desc">A private stunt ride with Summaz, professional jet ski racer. Up to 2 riders. The most talked-about booking in Nassau.</div>
-            <div class="step-pkg-card__price">$200 for 1 rider &middot; $275 for 2 riders</div>
-          </div>
-          <svg class="step-pkg-card__arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" width="18" height="18"><polyline points="9 18 15 12 9 6"/></svg>
-        </button>
-      </div>
-    </div>
+    ${BK_PICKER.map(g => `
+      <p class="bk-label">${g.group}</p>
+      <div class="bk-list">
+        ${g.items.map(it => `
+          <button type="button" class="bk-pkg" onclick="selectPackageFromPicker('${it.id}')">
+            <span class="bk-pkg__top">
+              <span class="bk-pkg__name">${it.name}</span>
+              <span class="bk-pkg__price">${it.price}</span>
+            </span>
+            <span class="bk-pkg__desc">${it.desc}</span>
+          </button>`).join('')}
+      </div>`).join('')}
   `;
 }
 
@@ -419,46 +426,19 @@ function renderStep1AllFamilyWave(body) {
   const baAmt = state.beachAdults  * BEACH_ADULT_PRICE;
   const bcAmt = state.beachChildren * BEACH_CHILD_PRICE;
   const jsAmt = state.jetSkiAdults  * JETSKI_ADULT_PRICE;
+  const beach = `
+    <p class="bk-label">Beach Access Package</p>
+    <div class="bk-list bk-list--grid">
+      ${bkStepper({ name: 'Adults', sub: `$${BEACH_ADULT_PRICE} per person`, minusId: 'beachAdultMinus', countId: 'beachAdultCount', minus: "changeCount('beachAdults',-1)", plus: "changeCount('beachAdults',1)", count: state.beachAdults })}
+      ${bkStepper({ name: 'Children', sub: `$${BEACH_CHILD_PRICE} per person · Under 12`, minusId: 'beachChildMinus', countId: 'beachChildCount', minus: "changeCount('beachChildren',-1)", plus: "changeCount('beachChildren',1)", count: state.beachChildren })}
+    </div>`;
+  const jet = `
+    <p class="bk-label">Beach Access Package + Jet Ski Ride</p>
+    ${bkStepper({ name: 'Adults (16+)', sub: `$${JETSKI_ADULT_PRICE} per person`, minusId: 'jetSkiAdultMinus', countId: 'jetSkiAdultCount', minus: "changeCount('jetSkiAdults',-1)", plus: "changeCount('jetSkiAdults',1)", count: state.jetSkiAdults })}`;
   body.innerHTML = `
     <p class="step-sub">Pick what each person in your group is getting. Beach access for everyone, jet ski session for whoever wants one.</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">The Family Wave Package</div>
-      <div class="stepper-group__label">Beach Access Package</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Adults <span class="stepper-row__label-price">$${BEACH_ADULT_PRICE}</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="beachAdultMinus" onclick="changeCount('beachAdults',-1)">−</button>
-          <span class="stepper__count" id="beachAdultCount">${state.beachAdults}</span>
-          <button class="stepper__btn" onclick="changeCount('beachAdults',1)">+</button>
-        </div>
-      </div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Children <span class="stepper-row__label-price">$${BEACH_CHILD_PRICE}</span></p>
-          <p class="stepper-row__sub">Under 12</p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="beachChildMinus" onclick="changeCount('beachChildren',-1)">−</button>
-          <span class="stepper__count" id="beachChildCount">${state.beachChildren}</span>
-          <button class="stepper__btn" onclick="changeCount('beachChildren',1)">+</button>
-        </div>
-      </div>
-      <div class="stepper-group__label" style="margin-top:10px">Beach Access Package + Jet Ski Ride</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Adults <span class="stepper-row__label-price">$${JETSKI_ADULT_PRICE}</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="jetSkiAdultMinus" onclick="changeCount('jetSkiAdults',-1)">−</button>
-          <span class="stepper__count" id="jetSkiAdultCount">${state.jetSkiAdults}</span>
-          <button class="stepper__btn" onclick="changeCount('jetSkiAdults',1)">+</button>
-        </div>
-      </div>
-    </div>
-    <div class="price-summary">
-      <div class="price-summary__rows">
+    ${state.selectedPackage === 'beachAccessJetSki' ? jet + beach : beach + jet}
+    ${bkSummary(`
         <div class="price-summary__row ${state.beachAdults === 0 ? 'is-hidden' : ''}" id="beachAdultSummaryRow">
           <span><span id="beachAdultSummaryCount">${state.beachAdults}</span> x Beach Access Package (Adults)</span>
           <strong id="beachAdultSummaryAmt">${formatMoney(baAmt)}</strong>
@@ -471,131 +451,35 @@ function renderStep1AllFamilyWave(body) {
           <span><span id="jetSkiAdultSummaryCount">${state.jetSkiAdults}</span> x Beach Access Package + Jet Ski Ride</span>
           <strong id="jetSkiAdultSummaryAmt">${formatMoney(jsAmt)}</strong>
         </div>
-      </div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
-      </div>
-    </div>
+        <p class="bk-summary-empty" id="bkSummaryEmpty" ${calcTotal() > 0 ? 'hidden' : ''}>Add at least one guest to see your total.</p>`)}
   `;
 }
 
-function renderStep1BeachAccessOnly(body) {
-  const baAmt = state.beachAdults  * BEACH_ADULT_PRICE;
-  const bcAmt = state.beachChildren * BEACH_CHILD_PRICE;
-  body.innerHTML = `
-    <p class="step-sub">Beach Access Package. How many adults and children in your group?</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">Beach Access Package</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Adults <span class="stepper-row__label-price">$${BEACH_ADULT_PRICE}</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="beachAdultMinus" onclick="changeCount('beachAdults',-1)">−</button>
-          <span class="stepper__count" id="beachAdultCount">${state.beachAdults}</span>
-          <button class="stepper__btn" onclick="changeCount('beachAdults',1)">+</button>
-        </div>
-      </div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Children <span class="stepper-row__label-price">$${BEACH_CHILD_PRICE}</span></p>
-          <p class="stepper-row__sub">Under 12</p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="beachChildMinus" onclick="changeCount('beachChildren',-1)">−</button>
-          <span class="stepper__count" id="beachChildCount">${state.beachChildren}</span>
-          <button class="stepper__btn" onclick="changeCount('beachChildren',1)">+</button>
-        </div>
-      </div>
-    </div>
-    <div class="price-summary">
-      <div class="price-summary__rows">
-        <div class="price-summary__row ${state.beachAdults === 0 ? 'is-hidden' : ''}" id="beachAdultSummaryRow">
-          <span><span id="beachAdultSummaryCount">${state.beachAdults}</span> x Beach Access Package (Adults)</span>
-          <strong id="beachAdultSummaryAmt">${formatMoney(baAmt)}</strong>
-        </div>
-        <div class="price-summary__row ${state.beachChildren === 0 ? 'is-hidden' : ''}" id="beachChildSummaryRow">
-          <span><span id="beachChildSummaryCount">${state.beachChildren}</span> x Beach Access Package (Children)</span>
-          <strong id="beachChildSummaryAmt">${formatMoney(bcAmt)}</strong>
-        </div>
-      </div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
-      </div>
-    </div>
-  `;
-}
 
-function renderStep1JetSkiRideOnly(body) {
-  const jsAmt = state.jetSkiAdults * JETSKI_ADULT_PRICE;
-  body.innerHTML = `
-    <p class="step-sub">Beach Access Package + Jet Ski Ride. Adults only, $${JETSKI_ADULT_PRICE} per person. Includes a full beach day plus a 25-minute solo jet ski session.</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">Beach Access Package + Jet Ski Ride</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Adults <span class="stepper-row__label-price">$${JETSKI_ADULT_PRICE}</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="jetSkiAdultMinus" onclick="changeCount('jetSkiAdults',-1)">−</button>
-          <span class="stepper__count" id="jetSkiAdultCount">${state.jetSkiAdults}</span>
-          <button class="stepper__btn" onclick="changeCount('jetSkiAdults',1)">+</button>
-        </div>
-      </div>
-    </div>
-    <div class="price-summary">
-      <div class="price-summary__rows">
-        <div class="price-summary__row ${state.jetSkiAdults === 0 ? 'is-hidden' : ''}" id="jetSkiAdultSummaryRow">
-          <span><span id="jetSkiAdultSummaryCount">${state.jetSkiAdults}</span> x Beach Access Package + Jet Ski Ride</span>
-          <strong id="jetSkiAdultSummaryAmt">${formatMoney(jsAmt)}</strong>
-        </div>
-      </div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
-      </div>
-    </div>
-  `;
-}
+
+
 
 function renderStep1JetSkiRental(body) {
+  const count = state.jetSkiRentalSlots.length;
   body.innerHTML = `
     <p class="step-sub">Add each rider and choose their session duration. Your total is the sum of all riders.</p>
-    <div class="stepper-group">
-      <div class="stepper-group__label stepper-group__label--parent">Jet Ski Rentals</div>
-      <div class="stepper-row">
-        <div class="stepper-row__info">
-          <p class="stepper-row__label">Riders <span class="stepper-row__label-price" style="font-size:11.5px;font-weight:500;color:var(--text-muted)">16+ only</span></p>
-        </div>
-        <div class="stepper">
-          <button class="stepper__btn" id="jsrRiderMinus" onclick="jsrChangeCount(-1)" ${state.jetSkiRentalSlots.length === 0 ? 'disabled' : ''}>−</button>
-          <span class="stepper__count" id="jsrRiderCount">${state.jetSkiRentalSlots.length}</span>
-          <button class="stepper__btn" onclick="jsrChangeCount(1)">+</button>
-        </div>
-      </div>
-    </div>
-    <div id="jsrSlotsContainer">${jsrSlotsHTML()}</div>
-    <div class="price-summary">
-      <div class="price-summary__rows" id="jsrSummaryRows">${jsrSummaryRowsHTML()}</div>
-      <div class="price-summary__total">
-        <span class="price-summary__total-label">Total</span>
-        <span class="price-summary__total-amount" id="priceSummaryTotal">${formatMoney(calcTotal())}</span>
-      </div>
-    </div>
+    <p class="bk-label">Jet Ski Rentals</p>
+    ${bkStepper({ name: 'Riders', sub: '16+ only · price varies by duration', minusId: 'jsrRiderMinus', countId: 'jsrRiderCount', minus: 'jsrChangeCount(-1)', plus: 'jsrChangeCount(1)', count, minDisabled: count === 0 })}
+    <div id="jsrSlotsContainer" class="bk-slots">${jsrSlotsHTML()}</div>
+    ${bkSummary(`<div id="jsrSummaryRows">${jsrSummaryRowsHTML()}</div>`)}
   `;
 }
 
 function jsrSlotsHTML() {
   if (state.jetSkiRentalSlots.length === 0) return '';
   return state.jetSkiRentalSlots.map((slot, i) => `
-    <div class="ps-rider-slot" id="jsrModalSlot${i}">
-      <div class="ps-rider-slot__label">Rider ${i + 1}</div>
-      <div class="ps-rider-slot__options">
-        <button class="ps-rider-slot__opt ${slot.duration === 30 ? 'is-selected' : ''}" data-duration="30" onclick="jsrSetDuration(${i},30)">30 min<br>$105</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 45 ? 'is-selected' : ''}" data-duration="45" onclick="jsrSetDuration(${i},45)">45 min<br>$125</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 60 ? 'is-selected' : ''}" data-duration="60" onclick="jsrSetDuration(${i},60)">60 min<br>$190</button>
+    <div class="bk-slot" id="jsrModalSlot${i}">
+      <p class="bk-slot__label">Rider ${i + 1}</p>
+      <div class="bk-slot__opts" role="group" aria-label="Rider ${i + 1} duration">
+        ${[30, 45, 60].map(d => `
+          <button type="button" class="bk-slot__opt ${slot.duration === d ? 'is-selected' : ''}" data-duration="${d}" onclick="jsrSetDuration(${i},${d})" aria-pressed="${slot.duration === d}">
+            <strong>${d} min</strong><span>$${JETSKI_RENTAL_PRICES[d]}</span>
+          </button>`).join('')}
       </div>
     </div>`).join('');
 }
@@ -634,8 +518,10 @@ function jsrSetDuration(idx, dur) {
   state.jetSkiRentalSlots[idx] = { duration: dur, price: JETSKI_RENTAL_PRICES[dur] };
   const slotEl = document.getElementById(`jsrModalSlot${idx}`);
   if (slotEl) {
-    slotEl.querySelectorAll('.ps-rider-slot__opt').forEach(btn => {
-      btn.classList.toggle('is-selected', parseInt(btn.dataset.duration) === dur);
+    slotEl.querySelectorAll('.bk-slot__opt').forEach(btn => {
+      const on = parseInt(btn.dataset.duration, 10) === dur;
+      btn.classList.toggle('is-selected', on);
+      btn.setAttribute('aria-pressed', String(on));
     });
   }
   const summEl = document.getElementById('jsrSummaryRows');
@@ -670,7 +556,10 @@ function changeCount(field, delta) {
     amt.textContent = formatMoney(newVal * prices[field]);
     row.classList.toggle('is-hidden', newVal === 0);
   }
-  document.getElementById('priceSummaryTotal').textContent = formatMoney(calcTotal());
+  const totalEl = document.getElementById('priceSummaryTotal');
+  if (totalEl) totalEl.textContent = formatMoney(calcTotal());
+  const emptyEl = document.getElementById('bkSummaryEmpty');
+  if (emptyEl) emptyEl.hidden = calcTotal() > 0;
   updateFooterTotal();
   updateStepperButtons();
 }
@@ -692,21 +581,35 @@ function updateStepperButtons() {
 function renderStep2(body) {
   const today = todayInBahamas();
   body.innerHTML = `
-    <p class="step-sub">We're open daily, 10am to 6pm. No timed slots. Arrive any time.</p>
-    <input
-      class="date-input"
-      type="date"
-      id="bookingDate"
-      min="${today}"
-      value="${state.date || ''}"
-      onchange="state.date = this.value"
-      aria-label="Select visit date"
-    >
-    <p class="date-hint">
-      <svg viewBox="0 0 24 24" fill="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <p class="step-sub">We're open daily, <strong>10am to 6pm</strong>. No timed slots. Arrive any time.</p>
+    <div class="bk-date ${state.date ? 'has-value' : ''}" id="bkDateWrap">
+      <input
+        class="bk-date__input"
+        type="date"
+        id="bookingDate"
+        min="${today}"
+        value="${state.date || ''}"
+        onchange="state.date = this.value; document.getElementById('bkDateWrap').classList.toggle('has-value', !!this.value); clearFieldErr('dateErr')"
+        onclick="bkOpenDatePicker()"
+        aria-label="Select visit date"
+      >
+      <span class="bk-date__placeholder" aria-hidden="true">DD/MM/YY</span>
+      <button type="button" class="bk-date__icon" onclick="bkOpenDatePicker()" aria-label="Open calendar">
+        <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 10h17M8 3v4M16 3v4"/></svg>
+      </button>
+    </div>
+    <p class="form-error" id="dateErr"></p>
+    <p class="bk-hint">
+      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M12 7.5v5.5M12 16.25v.25"/></svg>
       Dates are set in Nassau, Bahamas time. No timezone confusion.
     </p>
   `;
+}
+
+function bkOpenDatePicker() {
+  const el = document.getElementById('bookingDate');
+  if (!el) return;
+  try { el.showPicker(); } catch (e) { el.focus(); }
 }
 
 /* ── Step 3: Lead guest details ──────────────────────────── */
@@ -749,63 +652,63 @@ const showBigMableBundle = () => state.selectedPackage !== 'bigMable' && state.s
 
 function renderStep4(body) {
   const isChecked = state.bigMableAddon > 0;
+  const count = state.bigMableAddon || 2;
 
   const bundleSection = showBigMableBundle() ? `
-    <div class="step-segment">
-      <p class="step-segment__title">Add to your booking</p>
-      <p class="step-segment__sub">Charged now and included in your total.</p>
-      <div class="addon-bundle-card ${isChecked ? 'is-checked' : ''}" onclick="toggleBigMableAddon(this)">
-        <img class="addon-bundle-card__photo" src="https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_160,h_160,g_auto/v1782304570/summaz/clip4-poster.jpg" alt="Big Mable Tube Ride">
-        <div class="addon-bundle-card__body">
-          <p class="addon-bundle-card__name">Big Mable Tube Ride</p>
-          <p class="addon-bundle-card__desc">Up to 6 riders on one giant inflatable tube, towed by a jet ski. About 10 to 12 minutes. Ages 7 and up.</p>
-          <p class="addon-bundle-card__price">$${BIG_MABLE_PRICE} <em>/ per person</em></p>
-        </div>
-        <div class="addon-bundle-card__check">
-          <input type="checkbox" ${isChecked ? 'checked' : ''} aria-label="Add Big Mable Tube Ride">
-          <div class="addon-bundle-card__box">
-            <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-          </div>
-        </div>
-      </div>
-      <div class="addon-bundle-counter ${isChecked ? 'is-visible' : ''}" id="bigMableAddonCounter">
-        <p class="addon-bundle-counter__label">How many riders?</p>
-        <div class="addon-bundle-counter__ctrl">
-          <button class="counter-btn" onclick="changeBigMableAddonCount(-1); event.stopPropagation()">-</button>
-          <span class="counter-val" id="bigMableAddonVal">${state.bigMableAddon || 2}</span>
-          <button class="counter-btn" onclick="changeBigMableAddonCount(1); event.stopPropagation()">+</button>
-        </div>
-        <span class="addon-bundle-counter__total" id="bigMableAddonTotal">${formatMoney((state.bigMableAddon || 2) * BIG_MABLE_PRICE)}</span>
-      </div>
+    <p class="bk-label">Add to your booking</p>
+    <p class="bk-label-sub">Charged now and included in your total.</p>
+    <div class="bk-check bk-check--bundle ${isChecked ? 'is-checked' : ''}" role="checkbox" tabindex="0" aria-checked="${isChecked}" onclick="toggleBigMableAddon(this)" onkeydown="bkCheckKey(event, this)">
+      <input type="checkbox" ${isChecked ? 'checked' : ''} tabindex="-1" aria-hidden="true">
+      <span class="bk-check__box">${BK_TICK}</span>
+      <span class="bk-check__body">
+        <span class="bk-check__top">
+          <span class="bk-check__name">Big Mable Tube Ride</span>
+          <span class="bk-check__tag">$${BIG_MABLE_PRICE} / per person</span>
+        </span>
+        <span class="bk-check__note">Up to 6 riders on one giant inflatable tube, towed by a jet ski. About 10 to 12 minutes. Ages 7 and up.</span>
+        <span class="bk-bundle-counter ${isChecked ? 'is-visible' : ''}" id="bigMableAddonCounter" onclick="event.stopPropagation()">
+          <span class="bk-bundle-counter__label">How many riders?</span>
+          <span class="bk-stepper">
+            <button type="button" class="bk-stepper__btn" id="bigMableAddonMinus" onclick="changeBigMableAddonCount(-1)" aria-label="Remove a rider" ${count <= 2 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg></button>
+            <span class="bk-stepper__count" id="bigMableAddonVal">${count}</span>
+            <button type="button" class="bk-stepper__btn" id="bigMableAddonPlus" onclick="changeBigMableAddonCount(1)" aria-label="Add a rider" ${count >= 6 ? 'disabled' : ''}><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg></button>
+          </span>
+          <strong class="bk-bundle-counter__total" id="bigMableAddonTotal">${formatMoney(count * BIG_MABLE_PRICE)}</strong>
+        </span>
+      </span>
     </div>
   ` : '';
 
-  const checks = ADDON_LIST.map(a => `
-    <label class="addon-check ${state.addons.includes(a.id) ? 'is-checked' : ''}" onclick="toggleAddon('${a.id}', this, event)">
-      <input type="checkbox" ${state.addons.includes(a.id) ? 'checked' : ''} aria-label="${a.label}">
-      <div class="addon-check__box">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
-      <div class="addon-check__info">
-        <p class="addon-check__label">${a.label}</p>
-        <p class="addon-check__note">${a.note}</p>
-      </div>
-      <span class="addon-check__tag">${a.tag}</span>
-    </label>
-  `).join('');
+  const checks = ADDON_LIST.map(a => {
+    const on = state.addons.includes(a.id);
+    return `
+    <div class="bk-check ${on ? 'is-checked' : ''}" role="checkbox" tabindex="0" aria-checked="${on}" onclick="toggleAddon('${a.id}', this, event)" onkeydown="bkCheckKey(event, this)">
+      <input type="checkbox" ${on ? 'checked' : ''} tabindex="-1" aria-hidden="true">
+      <span class="bk-check__box">${BK_TICK}</span>
+      <span class="bk-check__body">
+        <span class="bk-check__top">
+          <span class="bk-check__name">${a.label}</span>
+          <span class="bk-check__tag">${a.tag}</span>
+        </span>
+        <span class="bk-check__note">${a.note}</span>
+      </span>
+    </div>`;
+  }).join('');
 
   body.innerHTML = `
     ${bundleSection}
-    <div class="step-segment">
-      <p class="step-segment__title">Let us know your interests</p>
-      <p class="step-segment__sub">Tick anything you might want. All paid and arranged on-site. Our team will follow up when you arrive.</p>
-      <div class="addon-check-list">${checks}</div>
-    </div>
-    <div class="form-group" style="margin-top:4px">
-      <label class="form-label" for="bookingNotes">Anything else to mention?</label>
-      <textarea class="notes-textarea" id="bookingNotes" placeholder="Special requests, accessibility needs, questions for the team…" oninput="state.notes = this.value">${escHtml(state.notes)}</textarea>
-    </div>
+    <p class="bk-label">Let us know your interests</p>
+    <p class="bk-label-sub">Tick anything you might want. All paid and arranged on-site. Our team will follow up when you arrive.</p>
+    <div class="bk-list bk-list--grid">${checks}</div>
+    <label class="bk-label" for="bookingNotes">Anything else to mention?</label>
+    <textarea class="bk-textarea" id="bookingNotes" placeholder="Special requests, accessibility needs, questions for the team…" oninput="state.notes = this.value">${escHtml(state.notes)}</textarea>
   `;
+}
+
+const BK_TICK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6.5 12.5 3.5 3.5 7.5-8"/></svg>';
+
+function bkCheckKey(e, el) {
+  if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); el.click(); }
 }
 
 function toggleBigMableAddon(cardEl) {
@@ -813,6 +716,8 @@ function toggleBigMableAddon(cardEl) {
   if (isNowChecked) {
     state.bigMableAddon = 2;
     cardEl.classList.add('is-checked');
+    cardEl.setAttribute('aria-checked', 'true');
+    bkSyncAddonStepper(2);
     cardEl.querySelector('input[type="checkbox"]').checked = true;
     const counter = document.getElementById('bigMableAddonCounter');
     if (counter) counter.classList.add('is-visible');
@@ -823,6 +728,7 @@ function toggleBigMableAddon(cardEl) {
   } else {
     state.bigMableAddon = 0;
     cardEl.classList.remove('is-checked');
+    cardEl.setAttribute('aria-checked', 'false');
     cardEl.querySelector('input[type="checkbox"]').checked = false;
     const counter = document.getElementById('bigMableAddonCounter');
     if (counter) counter.classList.remove('is-visible');
@@ -838,7 +744,15 @@ function changeBigMableAddonCount(delta) {
   if (val) val.textContent = next;
   const tot = document.getElementById('bigMableAddonTotal');
   if (tot) tot.textContent = formatMoney(next * BIG_MABLE_PRICE);
+  bkSyncAddonStepper(next);
   updateFooterTotal();
+}
+
+function bkSyncAddonStepper(n) {
+  const m = document.getElementById('bigMableAddonMinus');
+  const p = document.getElementById('bigMableAddonPlus');
+  if (m) m.disabled = n <= 2;
+  if (p) p.disabled = n >= 6;
 }
 
 function toggleAddon(id, labelEl, event) {
@@ -852,27 +766,25 @@ function toggleAddon(id, labelEl, event) {
     labelEl.classList.remove('is-checked');
   }
   labelEl.querySelector('input[type="checkbox"]').checked = idx === -1;
+  labelEl.setAttribute('aria-checked', String(idx === -1));
 }
 
 /* ── Step 5: Waiver ──────────────────────────────────────── */
 function renderStep5(body) {
   body.innerHTML = `
     <p class="step-sub">Please read the terms below and confirm before continuing.</p>
-    <div class="waiver-box">
-      <p><strong>Liability Waiver &amp; Terms</strong></p>
-      <br>
+    <div class="bk-waiver">
+      <p class="bk-waiver__title">Liability Waiver &amp; Terms</p>
       <p>Water sports involve inherent risk. By proceeding, you acknowledge that all guests will participate at their own risk and agree to follow safety guidelines provided by our crew. Life jackets and safety briefings are provided for all guests. Summaz Escape reserves the right to cancel or postpone bookings due to adverse weather conditions with a full refund or reschedule.</p>
     </div>
-    <label class="policy-check ${state.policyAccepted ? 'is-checked' : ''}" onclick="togglePolicy(this, event)">
-      <input type="checkbox" id="policyCheckbox" ${state.policyAccepted ? 'checked' : ''} aria-label="Policy agreement">
-      <div class="policy-check__box">
-        <svg viewBox="0 0 24 24" fill="none" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
-      </div>
-      <p class="policy-check__text">
+    <div class="bk-check bk-check--policy ${state.policyAccepted ? 'is-checked' : ''}" role="checkbox" tabindex="0" aria-checked="${state.policyAccepted}" onclick="togglePolicy(this, event)" onkeydown="bkCheckKey(event, this)">
+      <input type="checkbox" id="policyCheckbox" ${state.policyAccepted ? 'checked' : ''} tabindex="-1" aria-hidden="true">
+      <span class="bk-check__box">${BK_TICK}</span>
+      <span class="bk-check__note">
         I have read and accept the <a href="terms-and-conditions.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Terms &amp; Conditions</a>, <a href="refunds-and-cancellation.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Cancellation Policy</a>, and <a href="privacy-policy.html" target="_blank" rel="noopener" onclick="event.stopPropagation()">Privacy Policy</a>. I confirm all guests meet minimum age requirements.
-      </p>
-    </label>
-    <p class="form-error is-visible" id="policyErr" style="display:none;margin-top:8px">You must accept the terms to continue.</p>
+      </span>
+    </div>
+    <p class="form-error" id="policyErr">You must accept the terms to continue.</p>
   `;
 }
 
@@ -880,6 +792,7 @@ function togglePolicy(labelEl, event) {
   if (event) event.preventDefault(); // stop label from double-firing the checkbox
   state.policyAccepted = !state.policyAccepted;
   labelEl.classList.toggle('is-checked', state.policyAccepted);
+  labelEl.setAttribute('aria-checked', String(state.policyAccepted));
   labelEl.querySelector('input[type="checkbox"]').checked = state.policyAccepted;
   const err = document.getElementById('policyErr');
   if (err) err.style.display = 'none';
@@ -888,46 +801,42 @@ function togglePolicy(labelEl, event) {
 /* ── Step 6: Payment method ──────────────────────────────── */
 function renderStep6(body) {
   const methods = [
-    {
-      id: 'zelle', label: 'Zelle', tag: 'Send to anel@summazescape.com · or scan QR in your bank app',
-      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304826/summaz/zelle-logo.png" class="payment-option__logo" alt="Zelle">'
-    },
-    {
-      id: 'venmo', label: 'Venmo', tag: 'Pay via @summaz-escape · by username, link, or QR scan',
-      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304825/summaz/venmo-logo.png" class="payment-option__logo" alt="Venmo">'
-    },
-    {
-      id: 'arrival', label: 'Pay on Arrival', tag: 'Credit card machine on-site',
-      icon: '<svg viewBox="0 0 24 16" width="34" height="23" fill="none" aria-hidden="true"><rect x=".5" y=".5" width="23" height="15" rx="2" fill="#0F172A" stroke="#334155"/><rect y="4" width="24" height="4" fill="#1E293B"/><rect x="2" y="10" width="6" height="4" rx="1" fill="#475569"/><circle cx="19.5" cy="12" r="2" fill="#EF4444" opacity=".75"/><circle cx="17" cy="12" r="2" fill="#F97316" opacity=".75"/></svg>'
-    }
+    { id: 'zelle',   label: 'Zelle',          tag: 'Send to anel@summazescape.com or scan the QR in your bank app',
+      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304826/summaz/zelle-logo.png" alt="">' },
+    { id: 'venmo',   label: 'Venmo',          tag: 'Pay @summaz-escape by username, link, or QR scan',
+      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304825/summaz/venmo-logo.png" alt="">' },
+    { id: 'arrival', label: 'Pay on Arrival', tag: 'Credit card machine on-site',
+      icon: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6.5 15h4"/></svg>' }
   ];
 
   const options = methods.map(m => `
-    <label class="payment-option ${state.paymentMethod === m.id ? 'is-selected' : ''}" onclick="selectPayment('${m.id}', this)">
+    <label class="bk-pay ${state.paymentMethod === m.id ? 'is-selected' : ''}" onclick="selectPayment('${m.id}', this)">
       <input type="radio" name="paymentMethod" value="${m.id}" ${state.paymentMethod === m.id ? 'checked' : ''}>
-      <div class="payment-option__radio"><div class="payment-option__radio-dot"></div></div>
-      <div class="payment-option__icon">${m.icon}</div>
-      <div class="payment-option__info">
-        <p class="payment-option__name">${m.label}</p>
-        <span class="payment-option__tag">${m.tag}</span>
-      </div>
+      <span class="bk-pay__radio"></span>
+      <span class="bk-pay__icon">${m.icon}</span>
+      <span class="bk-pay__info">
+        <span class="bk-pay__name">${m.label}</span>
+        <span class="bk-pay__tag">${m.tag}</span>
+      </span>
     </label>
   `).join('');
 
   body.innerHTML = `
     <p class="step-sub">Zelle and Venmo are settled after booking. You'll receive full instructions and a QR code on the next screen and by email. Pay on Arrival means a card machine at the beach.</p>
-    <div class="payment-options">${options}</div>
-    <div class="payment-note is-arrival" id="arrivalNote">
-      You'll pay by credit card machine when you arrive. Our team will call to confirm your booking shortly after you submit.
+    <div class="bk-pay-panel">
+      <div class="bk-list" role="radiogroup" aria-label="Payment method">${options}</div>
+      <div class="payment-note is-arrival bk-pay-note" id="arrivalNote">
+        You'll pay by credit card machine when you arrive. Our team will call to confirm your booking shortly after you submit.
+      </div>
     </div>
-    <p class="form-error" id="paymentErr" style="margin-top:8px">Please select a payment method.</p>
+    <p class="form-error" id="paymentErr">Please select a payment method.</p>
   `;
   if (state.paymentMethod === 'arrival') updatePaymentNotes('arrival');
 }
 
 function selectPayment(id, labelEl) {
   state.paymentMethod = id;
-  document.querySelectorAll('.payment-option').forEach(el => el.classList.remove('is-selected'));
+  document.querySelectorAll('.bk-pay').forEach(el => el.classList.remove('is-selected'));
   labelEl.classList.add('is-selected');
   labelEl.querySelector('input[type="radio"]').checked = true;
   updatePaymentNotes(id);
@@ -997,8 +906,8 @@ function renderStep7(body) {
   body.innerHTML = `
     <p class="step-sub">Everything look right? Hit Confirm Booking when you're ready.</p>
     <div class="submit-error" id="submitError"></div>
-    <div class="review-card">
-      <div class="review-card__head">Booking Details</div>
+    <p class="bk-label">Booking Details</p>
+    <div class="review-card bk-box">
       <div class="review-card__rows">
         <div class="review-row">
           <span class="review-row__label">Date</span>
@@ -1015,8 +924,8 @@ function renderStep7(body) {
         <span class="review-total__amount">${formatMoney(total)}</span>
       </div>
     </div>
-    <div class="review-card">
-      <div class="review-card__head">Your Details</div>
+    <p class="bk-label">Your Details</p>
+    <div class="review-card bk-box">
       <div class="review-card__rows">
         <div class="review-row">
           <span class="review-row__label">Name</span>
@@ -1092,12 +1001,11 @@ async function validateStep(step) {
 
     case 2:
       if (!state.date) {
-        alert('Please select a date for your visit.');
-        document.getElementById('bookingDate')?.focus();
+        showFieldErr('dateErr', 'Please select a date for your visit.');
         return false;
       }
       if (state.date < todayInBahamas()) {
-        alert('Please select today or a future date.');
+        showFieldErr('dateErr', 'Please select today or a future date.');
         return false;
       }
       return true;
@@ -1267,6 +1175,7 @@ function showSubmitError(msg) {
 
 /* ── Confirmation screen ─────────────────────────────────── */
 function showConfirmation(data) {
+  bkAnimateSwap(1);
   state.reference = data.reference;
   state.total     = data.total || calcTotal();
 
@@ -1416,6 +1325,22 @@ function escHtml(str) {
     bar.classList.toggle('is-visible', !entries[0].isIntersecting);
   }, { threshold: 0 });
   obs.observe(hero);
+})();
+
+/* ── Floating Book Now: slide up between the hero and the closing CTA,
+   both of which already show their own Book Now button */
+(function() {
+  const fab = document.getElementById('bookFab');
+  const zones = [...document.querySelectorAll('.d-hero, .d-cta')];
+  if (!fab || !zones.length) return;
+  const inView = new Set();
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(e => e.isIntersecting ? inView.add(e.target) : inView.delete(e.target));
+    const show = inView.size === 0;
+    fab.classList.toggle('is-visible', show);
+    fab.inert = !show;
+  }, { rootMargin: '0px 0px -120px 0px' });
+  zones.forEach(z => obs.observe(z));
 })();
 
 /* ── Testimonials column — duplicate for seamless loop ───── */
@@ -1673,6 +1598,56 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
   els.forEach(el => { el.classList.add('d-reveal'); obs.observe(el); });
 })();
 
+/* ── Homepage FAQ: animated open / close ─────────────────── */
+(function() {
+  const EASE = 'cubic-bezier(.2,.7,.2,1)';
+  document.querySelectorAll('.d-faq__item').forEach(item => {
+    const summary = item.querySelector('summary');
+    const answer  = item.querySelector('.d-faq__answer');
+    if (!summary || !answer) return;
+    let anim = null;
+
+    summary.addEventListener('click', e => {
+      if (prefersReducedMotion) return;
+      e.preventDefault();
+      if (anim) anim.cancel();
+      const pad = getComputedStyle(answer).paddingBottom;
+      answer.style.overflow = 'hidden';
+
+      if (!item.open || item.classList.contains('is-closing')) {
+        item.classList.remove('is-closing');
+        item.open = true;
+        const h = answer.scrollHeight + 'px';
+        anim = answer.animate([
+          { height: '0px', paddingBottom: '0px', opacity: 0, transform: 'translateY(-6px)' },
+          { height: h, paddingBottom: pad, opacity: 1, transform: 'none' }
+        ], { duration: 360, easing: EASE });
+      } else {
+        item.classList.add('is-closing');
+        const h = answer.offsetHeight + 'px';
+        anim = answer.animate([
+          { height: h, paddingBottom: pad, opacity: 1, transform: 'none' },
+          { height: '0px', paddingBottom: '0px', opacity: 0, transform: 'translateY(-6px)' }
+        ], { duration: 280, easing: 'ease' });
+      }
+      // Settle on 'finish', with a timer backup in case the event is delayed
+      // (e.g. a backgrounded tab pauses animation frames)
+      const current = anim;
+      const closing = item.classList.contains('is-closing');
+      let settled = false;
+      const settle = () => {
+        if (settled || anim !== current) return;
+        settled = true;
+        if (closing) { item.open = false; item.classList.remove('is-closing'); }
+        answer.style.overflow = '';
+        anim = null;
+      };
+      current.addEventListener('finish', settle);
+      setTimeout(settle, (closing ? 280 : 360) + 80);
+    });
+  });
+})();
+
 /* ── Review stars ───────────────────────────────────────── */
 document.querySelectorAll('.d-stars[data-stars]').forEach(el => {
   const n = Number(el.dataset.stars) || 5;
@@ -1705,7 +1680,7 @@ document.querySelectorAll('.d-stars[data-stars]').forEach(el => {
     const v = wrap.querySelector('video');
     if (v) { v.pause(); v.src = ''; wrap.removeChild(v); }
     lb.classList.remove('is-open');
-    document.body.style.overflow = '';
+    document.body.style.overflow = (typeof isPanelOpen === 'function' && isPanelOpen()) ? 'hidden' : '';
   }
 
   window.openPanelVideo = openVideo;
@@ -1737,6 +1712,9 @@ let panel = {
   summazCount: 1,
   date: ''
 };
+let panelMedia        = [];
+let panelReturnFocus  = null;
+let panelBookObserver = null;
 
 function panelTotal() {
   if (panel.type === 'summaz') {
@@ -1753,89 +1731,7 @@ function panelTotal() {
        + (panel.jetSkiAdults  * JETSKI_ADULT_PRICE);
 }
 
-function openPanel(type) {
-  panel.type               = type;
-  panel.beachAdults        = 0;
-  panel.beachChildren      = 0;
-  panel.jetSkiAdults       = 0;
-  panel.jetSkiRentalAdults = 0;
-  panel.jetSkiRentalSlots  = [];
-  panel.bigMableCount      = 0;
-  panel.summazCount        = 1;
-  panel.date               = '';
-
-  const breadcrumbMap = {
-    beachAccess:       'Beach Access Package',
-    beachAccessJetSki: 'Beach Access Package + Jet Ski Ride',
-    jetSkiRental:      'Jet Ski Rentals',
-    bigMable:          'Big Mable Tube Ride',
-    summaz:            'The Summaz Experience'
-  };
-  const bc = document.getElementById('pkgPanelBreadcrumb');
-  if (bc) bc.textContent = breadcrumbMap[type] || '';
-
-  document.getElementById('pkgPanelContent').innerHTML = buildPanelContent(type);
-
-  // Only populate sidebar on desktop; mobile uses the bottom sheet
-  if (window.innerWidth > 768) {
-    document.getElementById('pkgPanelSidebar').innerHTML = buildPanelSidebar(type);
-  } else {
-    document.getElementById('pkgPanelSidebar').innerHTML = '';
-  }
-
-  const overlay = document.getElementById('pkgPanelOverlay');
-  overlay.classList.add('is-open');
-  document.body.style.overflow = 'hidden';
-  history.pushState({ panel: type }, '', '/book/' + (PANEL_SLUGS[type] || type));
-}
-
-function closePanel() {
-  closePanelSheet();
-  document.getElementById('pkgPanelOverlay').classList.remove('is-open');
-  document.body.style.overflow = '';
-  if (window.location.pathname.startsWith('/book/')) {
-    history.pushState({}, '', '/');
-  }
-}
-
-function panelOverlayClick(e) {
-  if (e.target === document.getElementById('pkgPanelOverlay')) closePanel();
-}
-
-function openPanelSheet() {
-  const body = document.getElementById('panelSheetBody');
-  if (body) body.innerHTML = buildPanelSidebar(panel.type);
-  document.getElementById('panelSheetOverlay').classList.add('is-open');
-}
-
-function closePanelSheet() {
-  const overlay = document.getElementById('panelSheetOverlay');
-  if (overlay) overlay.classList.remove('is-open');
-}
-
-function panelSheetOverlayClick(e) {
-  if (e.target === document.getElementById('panelSheetOverlay')) closePanelSheet();
-}
-
-/* ── Panel content builders ─────────────────────────────── */
-function buildPanelContent(type) {
-  switch (type) {
-    case 'beachAccess':       return panelContentBeachAccess();
-    case 'beachAccessJetSki': return panelContentBeachAccessJetSki();
-    case 'jetSkiRental':      return panelContentJetSkiRental();
-    case 'bigMable':          return panelContentBigMable();
-    case 'summaz':            return panelContentSummaz();
-    default: return '';
-  }
-}
-
-function buildPanelSidebar(type) {
-  if (type === 'summaz')       return panelSidebarSummaz();
-  if (type === 'jetSkiRental') return panelSidebarJetSkiRental();
-  if (type === 'bigMable')     return panelSidebarBigMable();
-  return panelSidebarFamilyWave();
-}
-
+/* ── Panel media ────────────────────────────────────────── */
 const PANEL_GALLERY_BEACH = [
   'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1784948510/summaz/beach-pkg-photo2.jpg',
   'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1784948514/summaz/beach-pkg-photo3.jpg',
@@ -1868,334 +1764,576 @@ const PANEL_VIDEOS_MABLE = [
 ];
 
 const PANEL_VIDEOS_SUMMAZ = [
-  { src: 'https://res.cloudinary.com/dko76z0df/video/upload/v1782304538/summaz/clip11.mp4', poster: 'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1782304519/summaz/clip11-poster.jpg' }
+  { src: 'https://res.cloudinary.com/dko76z0df/video/upload/v1782304538/summaz/clip11.mp4', poster: 'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1786733750/summaz/summaz-exp-card.jpg' }
 ];
 
-function galleryHTML(photos) {
-  return '<div class="panel-gallery">' + photos.map((src, i) =>
-    `<div class="panel-gallery__item" onclick="openImgLightbox('${src}')"><img src="${src}" alt="Photo ${i+1}" loading="lazy"></div>`
-  ).join('') + '</div>';
+/* Resize a Cloudinary crop (local assets pass through untouched) */
+function cldSize(url, w, h) {
+  return url.replace(/c_fill,w_\d+,h_\d+/, `c_fill,w_${w},h_${h}`);
 }
+const mPhoto = src => ({ type: 'photo', src });
+const mVideo = v   => ({ type: 'video', src: v.src, poster: v.poster });
 
-function experienceHTML(videos) {
-  return '<div class="panel-gallery panel-gallery--video">' + videos.map((v, i) =>
-    `<div class="panel-gallery__item panel-gallery__item--video" onclick="openPanelVideo('${v.src}')">
-      <img src="${v.poster}" alt="Video ${i+1}" loading="lazy">
-      <div class="panel-video-play"><svg viewBox="0 0 24 24" width="36" height="36"><circle cx="12" cy="12" r="12" fill="rgba(0,0,0,0.52)"/><polygon points="10,8 10,16 17,12" fill="white"/></svg></div>
-    </div>`
-  ).join('') + '</div>';
-}
+/* ── Package detail content ─────────────────────────────── */
+const PKG_DETAILS = {
+  summaz: {
+    title: 'The Summaz Experience',
+    bookSub: '1 or 2 riders per session',
+    desc: [
+      'Summaz is a professional jet ski racer. This is not a guided tour or a casual ride. You sit on the back, he takes you out on the open water, and he does things that will make your heart stop. Flips, sharp turns, full speed runs. Every minute of it is content.',
+      '1 or 2 riders per session. The price is fixed per booking. If you bring someone along, you split one of the best experiences Nassau has to offer. If you go solo, it is entirely yours.'
+    ],
+    tiers: [
+      { label: '1 Rider', price: SUMMAZ_PRICE_1, sub: 'per booking', act: { kind: 'summaz', value: 1 } },
+      { label: '2 Rider', price: SUMMAZ_PRICE_2, sub: 'per booking', act: { kind: 'summaz', value: 2 } }
+    ],
+    included: ['Private jet ski session with Summaz', 'Stunts and open water maneuvers', '1 or 2 riders per session', 'Life jacket provided'],
+    media: [
+      mVideo(PANEL_VIDEOS_SUMMAZ[0]),
+      mPhoto(PANEL_GALLERY_BEACH[1]),
+      mPhoto('https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1782304519/summaz/clip11-poster.jpg'),
+      mPhoto(PANEL_GALLERY_BEACH[0])
+    ],
+    faqs: [
+      ['How long is the session?', 'Sessions run around 15 to 20 minutes. The exact time depends on conditions and what Summaz decides to do out there. It feels shorter than it sounds.'],
+      ['Can 2 people ride at the same time?', 'Yes. The jet ski fits 2 riders. You book for 2 at $275 and both ride together for the full session. You do not get separate sessions at the 2-rider price.'],
+      ['Is it safe?', 'Summaz is a professional. He knows exactly how far to take it while keeping riders secure on the ski. Life jackets are worn for the full session.'],
+      ['Can I bring my phone or camera?', 'You can try, but the best shots come from someone filming from the shore or dock. Things happen fast on the water and phones do not survive every ride.'],
+      ['Is there a minimum age?', 'Riders should be adults. If you are bringing a younger passenger, reach out to us at booking@summazescape.com before booking so we can confirm suitability.']
+    ]
+  },
 
-function panelContentBeachAccess() {
+  beachAccessJetSki: {
+    title: 'Beach Access Package + Jet Ski Ride',
+    bookSub: 'Mix and match for your group',
+    desc: [
+      'Everything in the Beach Access Package plus a solo 25-minute jet ski session on the open water. Book this for anyone in your group who wants to get out on the water.',
+      'Your group can mix. Some people on the Beach Access Package for the day, others on Beach Access + Jet Ski Ride. You choose what each person is getting when you book.'
+    ],
+    tiers: [
+      { label: 'Beach + Jet Ski', price: JETSKI_ADULT_PRICE, sub: 'per person', act: { kind: 'count', field: 'jetSkiAdults' } },
+      { label: 'Beach Adult',     price: BEACH_ADULT_PRICE,  sub: 'per person', act: { kind: 'count', field: 'beachAdults' } },
+      { label: 'Beach Child',     price: BEACH_CHILD_PRICE,  sub: 'under 12',   act: { kind: 'count', field: 'beachChildren' } }
+    ],
+    included: ['Beach chairs and umbrella', 'Kayaks', 'Paddleboards', 'Water scooters', 'Snorkel masks', 'Floaties', 'Water hammock', 'Bottled water', '25-min solo jet ski session', 'Life jacket provided'],
+    media: [
+      mVideo(PANEL_VIDEOS_JETSKI[0]),
+      ...PANEL_GALLERY_BEACH.map(mPhoto),
+      mVideo(PANEL_VIDEOS_JETSKI[1]),
+      ...PANEL_GALLERY_JETSKI.map(mPhoto),
+      mVideo(PANEL_VIDEOS_BEACH[3])
+    ],
+    faqs: [
+      ['Is there a minimum age for the jet ski?', 'Riders must be 16 or older to operate a jet ski. Anyone under 16 in your group should be booked on the Beach Access Package instead.'],
+      ['Can I add someone to the jet ski after I arrive?', 'Yes. You can arrange extra jet ski time with the team on-site.'],
+      ['Is the jet ski session guided?', "Our crew rides alongside you. They'll show you the route and make sure the experience is safe and enjoyable."],
+      ['Can children join the beach access portion?', 'Yes. Book those guests on the Beach Access Package at $60 each and the adults who want the jet ski on the Beach Access + Jet Ski Ride option.']
+    ]
+  },
+
+  beachAccess: {
+    title: 'Beach Access Package',
+    bookSub: 'Mix and match for your group',
+    desc: [
+      'A full day at Arawak Cay. Beach chairs, water gear, and clear Caribbean water. Arrive any time between 10am and 6pm. No timed slots.',
+      'Great for families, couples, and groups. Kids can play with floaties and water scooters while adults take out the kayaks or paddleboards. Bottled water is included and restrooms are on-site.',
+      'Note: jet ski rides are not included in this package. If some of your group wants to get on the water, book those people on the Beach Access + Jet Ski Ride option instead.'
+    ],
+    tiers: [
+      { label: 'Adult', price: BEACH_ADULT_PRICE, sub: 'per person', act: { kind: 'count', field: 'beachAdults' } },
+      { label: 'Child', price: BEACH_CHILD_PRICE, sub: 'under 12',   act: { kind: 'count', field: 'beachChildren' } }
+    ],
+    included: ['Beach chairs and umbrella', 'Kayaks', 'Paddleboards', 'Water scooters', 'Snorkel masks', 'Floaties', 'Water hammock', 'Bottled water', 'Restrooms on-site', 'Lifeguard on duty'],
+    media: [
+      mVideo(PANEL_VIDEOS_BEACH[4]),
+      ...PANEL_GALLERY_BEACH.map(mPhoto),
+      ...PANEL_VIDEOS_BEACH.slice(0, 4).map(mVideo)
+    ],
+    faqs: [
+      ['What time should we arrive?', 'Any time between 10am and 6pm. No timed slots. Arrive when it works for your group.'],
+      ['Are children able to join?', 'Yes, absolutely. The Beach Access Package is open to all ages, no restrictions.'],
+      ['What counts as a child for pricing?', "Anyone under 12 books as a child at $60. Ages 12 and up are booked as adults at $75. If you're not sure, go with the age they'll be on the day of the visit."],
+      ['Is food available on-site?', 'The Bay restaurant is located at the venue. You can order food and drinks at any point during your visit.'],
+      ['What should we bring?', 'Swimwear, sunscreen, and a valid ID. Towels and extra sunscreen are recommended. Bottled water is included.']
+    ]
+  },
+
+  jetSkiRental: {
+    title: 'Jet Ski Rentals',
+    bookSub: 'Select riders and duration',
+    desc: [
+      'A standalone jet ski session right off Arawak Cay. No beach day needed, just pick your duration and get on the water.',
+      "This package is for adults. You need to be 16 or older to take the wheel. Bringing younger family or friends? That's totally fine. Each jet ski has two seats, so they can ride along with you tandem at no extra charge. Just book for the adult rider and bring whoever you want on the back."
+    ],
+    tiers: [
+      { label: '30 min', price: JETSKI_RENTAL_PRICES[30], sub: 'per rider', act: { kind: 'jsr', dur: 30 } },
+      { label: '45 min', price: JETSKI_RENTAL_PRICES[45], sub: 'per rider', act: { kind: 'jsr', dur: 45 } },
+      { label: '60 min', price: JETSKI_RENTAL_PRICES[60], sub: 'per rider', act: { kind: 'jsr', dur: 60 } }
+    ],
+    included: ['Jet ski session (solo or tandem)', 'Life jacket provided', 'Crew guidance on the water', 'No beach access required'],
+    media: [
+      mVideo(PANEL_VIDEOS_JETSKI[0]),
+      ...PANEL_GALLERY_JETSKI.map(mPhoto),
+      mVideo(PANEL_VIDEOS_JETSKI[1]),
+      mPhoto(PANEL_GALLERY_BEACH[0])
+    ],
+    faqs: [
+      ['What is the minimum age to ride?', 'Riders must be 16 or older. No exceptions.'],
+      ['Do I need to book in advance?', 'Booking ahead is strongly recommended, especially on weekends. Walk-ins depend on availability.'],
+      ['Can someone ride with me on the same jet ski?', "Yes. Each jet ski seats two, so tandem riding is completely fine and there's no extra charge for a passenger. You only book and pay for the rider who's driving. Perfect if you're bringing along a younger family member or someone who just wants to come along for the ride."],
+      ['What if the weather is bad on my date?', "If we need to cancel due to weather, you'll be offered a full reschedule or refund. We'll contact you in advance."]
+    ]
+  },
+
+  bigMable: {
+    title: 'Big Mable Tube Ride',
+    bookSub: '2 to 6 riders per ride · Ages 7+',
+    desc: [
+      "Up to 6 riders pile onto one giant inflatable tube and get towed through open water by a jet ski. It's loud, wet, and fast. A 10 to 12 minute ride that everyone remembers.",
+      'Great for families with kids, friend groups, or anyone who wants a break from the beach chairs. Ages 7 and up. Combined weight limit of 600 lb per ride.'
+    ],
+    tiers: [
+      { label: 'Per Rider', price: BIG_MABLE_PRICE,     sub: 'per person',      act: { kind: 'mable' } },
+      { label: 'Full Tube', price: BIG_MABLE_PRICE * 6, sub: '6 riders · per ride', act: { kind: 'mable', value: 6 } }
+    ],
+    included: ['10 to 12 minute tube ride', 'Up to 6 riders per tube', 'Life jackets provided', 'Jet ski tow crew on board'],
+    media: [
+      mVideo(PANEL_VIDEOS_MABLE[0]),
+      mPhoto('/assets/figma/pkg-bigmable.webp'),
+      mVideo(PANEL_VIDEOS_MABLE[1])
+    ],
+    faqs: [
+      ['What is the minimum age?', 'Ages 7 and up. Children under 7 are not permitted on the Big Mable for safety reasons.'],
+      ['How many people can ride at once?', 'Minimum 2, maximum 6 riders per ride. The tube seats everyone together for a shared experience.'],
+      ['Is there a weight limit?', 'Yes. The combined weight of all riders must not exceed 600 lb. Our team will confirm on arrival.'],
+      ['Do we need beach access to book this?', "No. The Big Mable Tube Ride is a standalone experience. You don't need to purchase a Beach Access Package to book it."]
+    ]
+  }
+};
+
+/* ── Icons ──────────────────────────────────────────────── */
+const PD_ICON = {
+  check:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5 12 15l5.5-5.5"/></svg>',
+  chevron: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
+  minus:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>',
+  plus:    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>',
+  play:    '<svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M8 5.5v13l11-6.5z" fill="currentColor"/></svg>',
+  prev:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m15 18-6-6 6-6"/></svg>',
+  next:    '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>'
+};
+
+/* ── Panel builders ─────────────────────────────────────── */
+function buildPanelHTML(type) {
+  const d = PKG_DETAILS[type];
+  if (!d) return '';
+  panelMedia = d.media;
+
+  const media = d.media.map((m, i) => {
+    const thumb = cldSize(m.type === 'video' ? m.poster : m.src, 1280, 740);
+    const label = m.type === 'video' ? `Play video ${i + 1}` : `View photo ${i + 1}`;
+    return `
+      <button type="button" class="pd-media__item${m.type === 'video' ? ' pd-media__item--video' : ''}" onclick="openPanelMedia(${i})" aria-label="${label}">
+        <img src="${thumb}" alt="" ${i > 1 ? 'loading="lazy"' : ''} draggable="false">
+        ${m.type === 'video' ? `<span class="pd-media__play">${PD_ICON.play}</span>` : ''}
+      </button>`;
+  }).join('');
+
+  const dots = d.media.length > 1
+    ? `<div class="pd-media__dots" id="pdMediaDots">${d.media.map((_, i) => `<span class="${i === 0 ? 'is-active' : ''}"></span>`).join('')}</div>`
+    : '';
+
+  const tiers = d.tiers.map((t, i) => `
+    <button type="button" class="pd-tier" data-tier="${i}" onclick="panelTierClick(${i})" aria-pressed="false">
+      <span class="pd-tier__label">${t.label}</span>
+      <span class="pd-tier__price">$${t.price}</span>
+      <span class="pd-tier__sub">${t.sub}</span>
+      <span class="pd-tier__badge" hidden></span>
+    </button>`).join('');
+
+  const included = d.included.map(item => `
+    <li class="pd-included__item"><span class="pd-included__icon">${PD_ICON.check}</span><span>${item}</span></li>`).join('');
+
+  const faqs = d.faqs.map(([q, a], i) => `
+    <div class="pd-faq__item">
+      <button type="button" class="pd-faq__q" id="pdFaqQ${i}" aria-expanded="false" aria-controls="pdFaqA${i}" onclick="togglePanelFaq(this)">
+        <span>${q}</span>${PD_ICON.chevron}
+      </button>
+      <div class="pd-faq__a" id="pdFaqA${i}" role="region" aria-labelledby="pdFaqQ${i}"><div><p>${a}</p></div></div>
+    </div>`).join('');
+
   return `
-    <span class="panel__cat-badge panel__cat-badge--family">Family Wave Package</span>
-    <h2 class="panel__title">Beach Access Package</h2>
-    <div class="panel__desc">
-      <p>A full day at Arawak Cay. Beach chairs, water gear, and clear Caribbean water. Arrive any time between 10am and 6pm. No timed slots.</p>
-      <p>Great for families, couples, and groups. Kids can play with floaties and water scooters while adults take out the kayaks or paddleboards. Bottled water is included and restrooms are on-site.</p>
-      <p>Note: jet ski rides are not included in this package. If some of your group wants to get on the water, book those people on the Beach Access + Jet Ski Ride option instead.</p>
+    <div class="pd-media">
+      <div class="pd-media__track" id="pdMediaTrack">${media}</div>
+      <button type="button" class="pd-media__nav pd-media__nav--prev" id="pdMediaPrev" onclick="scrollPanelMedia(-1)" aria-label="Previous media">${PD_ICON.prev}</button>
+      <button type="button" class="pd-media__nav pd-media__nav--next" id="pdMediaNext" onclick="scrollPanelMedia(1)" aria-label="Next media">${PD_ICON.next}</button>
+      ${dots}
     </div>
-    <span class="panel__section-label">What's Included</span>
-    <ul class="panel__included-list">
-      <li class="panel__included-item">Beach chairs and umbrella</li>
-      <li class="panel__included-item">Kayaks</li>
-      <li class="panel__included-item">Paddleboards</li>
-      <li class="panel__included-item">Water scooters</li>
-      <li class="panel__included-item">Snorkel masks</li>
-      <li class="panel__included-item">Floaties</li>
-      <li class="panel__included-item">Water hammock</li>
-      <li class="panel__included-item">Bottled water</li>
-      <li class="panel__included-item">Restrooms on-site</li>
-      <li class="panel__included-item">Lifeguard on duty</li>
-    </ul>
-    <span class="panel__section-label">Photos</span>
-    ${galleryHTML(PANEL_GALLERY_BEACH)}
-    <span class="panel__section-label">Experience</span>
-    ${experienceHTML(PANEL_VIDEOS_BEACH)}
-    <span class="panel__section-label">Questions</span>
-    <div class="panel-faq">
-      <details class="panel-faq-item">
-        <summary>What time should we arrive?</summary>
-        <p>Any time between 10am and 6pm. No timed slots. Arrive when it works for your group.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Are children able to join?</summary>
-        <p>Yes, absolutely. The Beach Access Package is open to all ages, no restrictions.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>What counts as a child for pricing?</summary>
-        <p>Anyone under 12 books as a child at $60. Ages 12 and up are booked as adults at $75. If you're not sure, go with the age they'll be on the day of the visit.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Is food available on-site?</summary>
-        <p>The Bay restaurant is located at the venue. You can order food and drinks at any point during your visit.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>What should we bring?</summary>
-        <p>Swimwear, sunscreen, and a valid ID. Towels and extra sunscreen are recommended. Bottled water is included.</p>
-      </details>
-    </div>
-  `;
+
+    <div class="pd-grid">
+      <div class="pd-intro">
+        <h2 class="pd-title" id="pdTitle">${d.title}</h2>
+        <div class="pd-desc">${d.desc.map(p => `<p>${p}</p>`).join('')}</div>
+      </div>
+
+      <aside class="pd-aside">
+        <h3 class="pd-label pd-label--pricing">Pricing</h3>
+        <div class="pd-tiers" style="--pd-cols:${d.tiers.length}">${tiers}</div>
+        <div class="pd-book" id="pdBook">${buildPanelSidebar(type)}</div>
+      </aside>
+
+      <div class="pd-details">
+        <h3 class="pd-label">What's Included</h3>
+        <ul class="pd-included">${included}</ul>
+        <h3 class="pd-label">Questions</h3>
+        <div class="pd-faq">${faqs}</div>
+      </div>
+    </div>`;
 }
 
-function panelContentBeachAccessJetSki() {
+function buildPanelSidebar(type) {
+  if (type === 'summaz')       return panelSidebarSummaz();
+  if (type === 'jetSkiRental') return panelSidebarJetSkiRental();
+  if (type === 'bigMable')     return panelSidebarBigMable();
+  return panelSidebarFamilyWave();
+}
+
+/* Shared booking card pieces */
+function pdCounterHTML(o) {
   return `
-    <span class="panel__cat-badge panel__cat-badge--family">Family Wave Package</span>
-    <h2 class="panel__title">Beach Access Package + Jet Ski Ride</h2>
-    <div class="panel__desc">
-      <p>Everything in the Beach Access Package plus a solo 25-minute jet ski session on the open water. Book this for anyone in your group who wants to get out on the water.</p>
-      <p>Your group can mix. Some people on the Beach Access Package for the day, others on Beach Access + Jet Ski Ride. You choose what each person is getting when you book.</p>
-    </div>
-    <span class="panel__section-label">What's Included</span>
-    <ul class="panel__included-list">
-      <li class="panel__included-item">Beach chairs and umbrella</li>
-      <li class="panel__included-item">Kayaks</li>
-      <li class="panel__included-item">Paddleboards</li>
-      <li class="panel__included-item">Water scooters</li>
-      <li class="panel__included-item">Snorkel masks</li>
-      <li class="panel__included-item">Floaties</li>
-      <li class="panel__included-item">Water hammock</li>
-      <li class="panel__included-item">Bottled water</li>
-      <li class="panel__included-item">25-min solo jet ski session</li>
-      <li class="panel__included-item">Life jacket provided</li>
-    </ul>
-    <span class="panel__section-label">Photos</span>
-    ${galleryHTML(PANEL_GALLERY_BEACH)}
-    <span class="panel__section-label">Experience</span>
-    ${experienceHTML([...PANEL_VIDEOS_JETSKI, ...PANEL_VIDEOS_BEACH])}
-    <span class="panel__section-label">Questions</span>
-    <div class="panel-faq">
-      <details class="panel-faq-item">
-        <summary>Is there a minimum age for the jet ski?</summary>
-        <p>Riders must be 16 or older to operate a jet ski. Anyone under 16 in your group should be booked on the Beach Access Package instead.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Can I add someone to the jet ski after I arrive?</summary>
-        <p>Yes. You can arrange extra jet ski time with the team on-site.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Is the jet ski session guided?</summary>
-        <p>Our crew rides alongside you. They'll show you the route and make sure the experience is safe and enjoyable.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Can children join the beach access portion?</summary>
-        <p>Yes. Book those guests on the Beach Access Package at $60 each and the adults who want the jet ski on the Beach Access + Jet Ski Ride option.</p>
-      </details>
-    </div>
-  `;
+    <div class="pd-counter">
+      <div class="pd-counter__info">
+        <div class="pd-counter__name">${o.name}</div>
+        <div class="pd-counter__sub">${o.sub}</div>
+      </div>
+      <div class="pd-stepper">
+        <button type="button" class="pd-stepper__btn" id="${o.minusId}" onclick="${o.minus}" aria-label="Remove one: ${o.name}" ${o.minDisabled ? 'disabled' : ''}>${PD_ICON.minus}</button>
+        <span class="pd-stepper__count" id="${o.countId}" aria-live="polite">${o.count}</span>
+        <button type="button" class="pd-stepper__btn" ${o.plusId ? `id="${o.plusId}"` : ''} onclick="${o.plus}" aria-label="Add one: ${o.name}" ${o.maxDisabled ? 'disabled' : ''}>${PD_ICON.plus}</button>
+      </div>
+    </div>`;
 }
 
-function panelContentJetSkiRental() {
+function pdBookHTML(o) {
   return `
-    <span class="panel__cat-badge panel__cat-badge--solo">Individuals</span>
-    <h2 class="panel__title">Jet Ski Rentals</h2>
-    <div class="panel__desc">
-      <p>A standalone jet ski session right off Arawak Cay. No beach day needed, just pick your duration and get on the water.</p>
-      <p>This package is for adults. You need to be 16 or older to take the wheel. Bringing younger family or friends? That's totally fine. Each jet ski has two seats, so they can ride along with you tandem at no extra charge. Just book for the adult rider and bring whoever you want on the back.</p>
-    </div>
-    <span class="panel__section-label">Pricing</span>
-    <div class="panel-tiers">
-      <div class="panel-tier">
-        <div class="panel-tier__dur">30 min</div>
-        <div class="panel-tier__price">$105</div>
-        <div class="panel-tier__price-sub">per rider</div>
-      </div>
-      <div class="panel-tier">
-        <div class="panel-tier__dur">45 min</div>
-        <div class="panel-tier__price">$125</div>
-        <div class="panel-tier__price-sub">per rider</div>
-      </div>
-      <div class="panel-tier">
-        <div class="panel-tier__dur">60 min</div>
-        <div class="panel-tier__price">$190</div>
-        <div class="panel-tier__price-sub">per rider</div>
-      </div>
-    </div>
-    <span class="panel__section-label">What's Included</span>
-    <ul class="panel__included-list">
-      <li class="panel__included-item">Jet ski session (solo or tandem, no extra charge)</li>
-      <li class="panel__included-item">Life jacket provided</li>
-      <li class="panel__included-item">Crew guidance on the water</li>
-      <li class="panel__included-item">No beach access required</li>
-    </ul>
-    <span class="panel__section-label">Photos</span>
-    ${galleryHTML([...PANEL_GALLERY_JETSKI, ...PANEL_GALLERY_BEACH])}
-    <span class="panel__section-label">Experience</span>
-    ${experienceHTML(PANEL_VIDEOS_JETSKI)}
-    <span class="panel__section-label">Questions</span>
-    <div class="panel-faq">
-      <details class="panel-faq-item">
-        <summary>What is the minimum age to ride?</summary>
-        <p>Riders must be 16 or older. No exceptions.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Do I need to book in advance?</summary>
-        <p>Booking ahead is strongly recommended, especially on weekends. Walk-ins depend on availability.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Can someone ride with me on the same jet ski?</summary>
-        <p>Yes. Each jet ski seats two, so tandem riding is completely fine and there's no extra charge for a passenger. You only book and pay for the rider who's driving. Perfect if you're bringing along a younger family member or someone who just wants to come along for the ride.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>What if the weather is bad on my date?</summary>
-        <p>If we need to cancel due to weather, you'll be offered a full reschedule or refund. We'll contact you in advance.</p>
-      </details>
-    </div>
-  `;
+    <h3 class="pd-book__title">${o.title}</h3>
+    <p class="pd-book__sub">${o.sub}</p>
+    ${o.body}
+    <div class="pd-book__total"><span>Total</span><strong id="psPanelTotal">${formatMoney(panelTotal())}</strong></div>
+    <button type="button" class="pd-book__btn" id="psPanelBookBtn" onclick="bookFromPanel()" ${o.disabled ? 'disabled' : ''}>${o.btn}</button>
+    ${o.note ? `<p class="pd-book__note">${o.note}</p>` : ''}`;
 }
 
-function panelContentSummaz() {
-  return `
-    <span class="panel__cat-badge panel__cat-badge--solo">Individuals</span>
-    <h2 class="panel__title">The Summaz Experience</h2>
-    <div class="panel__desc">
-      <p>Summaz is a professional jet ski racer. This is not a guided tour or a casual ride. You sit on the back, he takes you out on the open water, and he does things that will make your heart stop. Flips, sharp turns, full speed runs. Every minute of it is content.</p>
-      <p>1 or 2 riders per session. The price is fixed per booking. If you bring someone along, you split one of the best experiences Nassau has to offer. If you go solo, it is entirely yours.</p>
-    </div>
-    <span class="panel__section-label">Pricing</span>
-    <div class="panel-tiers">
-      <div class="panel-tier">
-        <div class="panel-tier__dur">1 Rider</div>
-        <div class="panel-tier__price">$200</div>
-        <div class="panel-tier__price-sub">per booking</div>
-      </div>
-      <div class="panel-tier">
-        <div class="panel-tier__dur">2 Riders</div>
-        <div class="panel-tier__price">$275</div>
-        <div class="panel-tier__price-sub">per booking</div>
-      </div>
-    </div>
-    <span class="panel__section-label">What's Included</span>
-    <ul class="panel__included-list">
-      <li class="panel__included-item">Private jet ski session with Summaz</li>
-      <li class="panel__included-item">Stunts and open water maneuvers</li>
-      <li class="panel__included-item">1 or 2 riders per session</li>
-      <li class="panel__included-item">Life jacket provided</li>
-    </ul>
-    <span class="panel__section-label">Photos</span>
-    ${galleryHTML([
-      'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1786733750/summaz/summaz-exp-card.jpg',
-      'https://res.cloudinary.com/dko76z0df/image/upload/c_fill,w_640,h_480,g_auto/v1782304519/summaz/clip11-poster.jpg'
-    ])}
-    <span class="panel__section-label">Experience</span>
-    ${experienceHTML(PANEL_VIDEOS_SUMMAZ)}
-    <span class="panel__section-label">Questions</span>
-    <div class="panel-faq">
-      <details class="panel-faq-item">
-        <summary>How long is the session?</summary>
-        <p>Sessions run around 15 to 20 minutes. The exact time depends on conditions and what Summaz decides to do out there. It feels shorter than it sounds.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Can 2 people ride at the same time?</summary>
-        <p>Yes. The jet ski fits 2 riders. You book for 2 at $275 and both ride together for the full session. You do not get separate sessions at the 2-rider price.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Is it safe?</summary>
-        <p>Summaz is a professional. He knows exactly how far to take it while keeping riders secure on the ski. Life jackets are worn for the full session.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Can I bring my phone or camera?</summary>
-        <p>You can try, but the best shots come from someone filming from the shore or dock. Things happen fast on the water and phones do not survive every ride.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Is there a minimum age?</summary>
-        <p>Riders should be adults. If you are bringing a younger passenger, reach out to us at booking@summazescape.com before booking so we can confirm suitability.</p>
-      </details>
-    </div>
-  `;
+function familyBookBtnText() {
+  return panelTotal() === 0 ? 'Add guests to book' : 'Book This Package';
 }
 
-/* ── Panel sidebars ─────────────────────────────────────── */
 function panelSidebarFamilyWave() {
-  const today = todayInBahamas();
+  const beach = `
+    <span class="pd-book__label">Beach Access Package</span>
+    ${pdCounterHTML({ name: 'Adults', sub: `$${BEACH_ADULT_PRICE} per person`, countId: 'psFWBeachAdultCount', minusId: 'psFWBeachAdultMinus', minus: "panelCount('beachAdults',-1)", plus: "panelCount('beachAdults',1)", count: panel.beachAdults, minDisabled: panel.beachAdults <= 0 })}
+    ${pdCounterHTML({ name: 'Children', sub: `$${BEACH_CHILD_PRICE} per person · Under 12`, countId: 'psFWBeachChildCount', minusId: 'psFWBeachChildMinus', minus: "panelCount('beachChildren',-1)", plus: "panelCount('beachChildren',1)", count: panel.beachChildren, minDisabled: panel.beachChildren <= 0 })}`;
+  const jet = `
+    <span class="pd-book__label">Beach Access + Jet Ski Ride</span>
+    ${pdCounterHTML({ name: 'Adults (16+)', sub: `$${JETSKI_ADULT_PRICE} per person`, countId: 'psFWJetSkiAdultCount', minusId: 'psFWJetSkiAdultMinus', minus: "panelCount('jetSkiAdults',-1)", plus: "panelCount('jetSkiAdults',1)", count: panel.jetSkiAdults, minDisabled: panel.jetSkiAdults <= 0 })}`;
+  return pdBookHTML({
+    title: PKG_DETAILS[panel.type].title,
+    sub: PKG_DETAILS[panel.type].bookSub,
+    body: panel.type === 'beachAccessJetSki' ? jet + beach : beach + jet,
+    disabled: panelTotal() === 0,
+    btn: familyBookBtnText(),
+    note: "You'll confirm guest details in the next step. Free cancellation 7 days before."
+  });
+}
+
+function jsrSlotHTML(slot, i) {
   return `
-    <div class="ps-title">Family Wave Package</div>
-    <div class="ps-subtitle">Mix and match for your group</div>
-    <span class="ps-section-label">Beach Access Package</span>
-    <div class="ps-counter-row" style="border-top:1px solid #e5e9ef">
-      <div>
-        <div class="ps-counter-name">Adults</div>
-        <div class="ps-counter-price">$${BEACH_ADULT_PRICE} per person</div>
+    <div class="pd-slot" id="psJSRSlot${i}">
+      <div class="pd-slot__label">Rider ${i + 1}</div>
+      <div class="pd-slot__opts" role="group" aria-label="Rider ${i + 1} duration">
+        ${[30, 45, 60].map(dur => `
+          <button type="button" class="pd-slot__opt ${slot.duration === dur ? 'is-selected' : ''}" data-duration="${dur}" onclick="setPanelRiderDuration(${i},${dur})" aria-pressed="${slot.duration === dur}">
+            <strong>${dur} min</strong><span>$${JETSKI_RENTAL_PRICES[dur]}</span>
+          </button>`).join('')}
       </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psFWBeachAdultMinus" onclick="panelCount('beachAdults',-1)" ${panel.beachAdults <= 0 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psFWBeachAdultCount">${panel.beachAdults}</span>
-        <button class="ps-stepper-btn" onclick="panelCount('beachAdults',1)">+</button>
-      </div>
-    </div>
-    <div class="ps-counter-row">
-      <div>
-        <div class="ps-counter-name">Children</div>
-        <div class="ps-counter-price">$${BEACH_CHILD_PRICE} per person</div>
-        <div class="ps-counter-sub">Under 12</div>
-      </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psFWBeachChildMinus" onclick="panelCount('beachChildren',-1)" ${panel.beachChildren <= 0 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psFWBeachChildCount">${panel.beachChildren}</span>
-        <button class="ps-stepper-btn" onclick="panelCount('beachChildren',1)">+</button>
-      </div>
-    </div>
-    <span class="ps-section-label">Beach Access Package + Jet Ski Ride</span>
-    <div class="ps-counter-row" style="border-top:1px solid #e5e9ef">
-      <div>
-        <div class="ps-counter-name">Adults</div>
-        <div class="ps-counter-price">$${JETSKI_ADULT_PRICE} per person</div>
-      </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psFWJetSkiAdultMinus" onclick="panelCount('jetSkiAdults',-1)" ${panel.jetSkiAdults <= 0 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psFWJetSkiAdultCount">${panel.jetSkiAdults}</span>
-        <button class="ps-stepper-btn" onclick="panelCount('jetSkiAdults',1)">+</button>
-      </div>
-    </div>
-    <div class="ps-total-row">
-      <span class="ps-total-label">Total</span>
-      <span class="ps-total-amount" id="psPanelTotal">${formatMoney(panelTotal())}</span>
-    </div>
-    <button class="ps-book-btn" onclick="bookFromPanel()">Book This Package</button>
-    <p class="ps-note">You'll confirm guest details in the next step. Free cancellation 7 days before.</p>
-  `;
+    </div>`;
 }
 
 function panelSidebarJetSkiRental() {
-  const today  = todayInBahamas();
-  const count  = panel.jetSkiRentalSlots.length;
-  const slotsH = count > 0 ? panel.jetSkiRentalSlots.map((slot, i) => `
-    <div class="ps-rider-slot" id="psJSRSlot${i}">
-      <div class="ps-rider-slot__label">Rider ${i + 1}</div>
-      <div class="ps-rider-slot__options">
-        <button class="ps-rider-slot__opt ${slot.duration === 30 ? 'is-selected' : ''}" data-duration="30" onclick="setPanelRiderDuration(${i},30)">30 min<br>$105</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 45 ? 'is-selected' : ''}" data-duration="45" onclick="setPanelRiderDuration(${i},45)">45 min<br>$125</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 60 ? 'is-selected' : ''}" data-duration="60" onclick="setPanelRiderDuration(${i},60)">60 min<br>$190</button>
-      </div>
-    </div>`).join('') : '';
-  return `
-    <div class="ps-title">Jet Ski Rentals</div>
-    <div class="ps-subtitle">Select riders and duration</div>
-    <span class="ps-section-label">Number of Riders</span>
-    <div class="ps-counter-row" style="border-top:1px solid #e5e9ef">
-      <div>
-        <div class="ps-counter-name">Adults (16+)</div>
-        <div class="ps-counter-price">Price varies by duration</div>
-      </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psJSRAdultMinus" onclick="panelJSRCount(-1)" ${count <= 0 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psJSRAdultCount">${count}</span>
-        <button class="ps-stepper-btn" onclick="panelJSRCount(1)">+</button>
-      </div>
-    </div>
-    <div id="psJSRSlots" class="ps-rider-slots">${slotsH}</div>
-    <div class="ps-total-row">
-      <span class="ps-total-label">Total</span>
-      <span class="ps-total-amount" id="psPanelTotal">${formatMoney(panelTotal())}</span>
-    </div>
-    <button class="ps-book-btn" id="psPanelBookBtn" onclick="bookFromPanel()" ${count === 0 ? 'disabled' : ''}>
-      ${count === 0 ? 'Add riders to book' : 'Book This Package'}
-    </button>
-    <p class="ps-note">Each rider picks their duration independently. Total is the sum of all riders.</p>
-  `;
+  const count = panel.jetSkiRentalSlots.length;
+  return pdBookHTML({
+    title: 'Jet Ski Rentals',
+    sub: PKG_DETAILS.jetSkiRental.bookSub,
+    body: `
+      <span class="pd-book__label">Riders</span>
+      ${pdCounterHTML({ name: 'Adults (16+)', sub: 'Price varies by duration', countId: 'psJSRAdultCount', minusId: 'psJSRAdultMinus', minus: 'panelJSRCount(-1)', plus: 'panelJSRCount(1)', count, minDisabled: count <= 0 })}
+      <div id="psJSRSlots" class="pd-slots">${panel.jetSkiRentalSlots.map(jsrSlotHTML).join('')}</div>`,
+    disabled: count === 0,
+    btn: count === 0 ? 'Add riders to book' : 'Book This Package',
+    note: 'Each rider picks their duration. Total is the sum of all riders.'
+  });
+}
+
+function panelSidebarBigMable() {
+  const count = panel.bigMableCount;
+  return pdBookHTML({
+    title: 'Big Mable Tube Ride',
+    sub: PKG_DETAILS.bigMable.bookSub,
+    body: `
+      <span class="pd-book__label">Riders</span>
+      ${pdCounterHTML({ name: 'Riders (Ages 7+)', sub: `$${BIG_MABLE_PRICE} per person · max 6`, countId: 'psBigMableCount', minusId: 'psBigMableMinus', plusId: 'psBigMablePlus', minus: 'panelBigMableCount(-1)', plus: 'panelBigMableCount(1)', count, minDisabled: count <= 0, maxDisabled: count >= 6 })}
+      <p class="pd-book__warn" id="psBigMableWarn" ${count === 1 ? '' : 'hidden'}>Minimum 2 riders required.</p>`,
+    disabled: count < 2,
+    btn: count < 2 ? 'Add at least 2 riders' : 'Book This Package',
+    note: '600 lb combined weight limit. Payment handled on arrival. Confirmed via WhatsApp.'
+  });
+}
+
+function panelSidebarSummaz() {
+  const count = panel.summazCount;
+  return pdBookHTML({
+    title: 'The Summaz Experience',
+    sub: PKG_DETAILS.summaz.bookSub,
+    body: `
+      <span class="pd-book__label">Riders</span>
+      ${pdCounterHTML({ name: 'Riders', sub: `1 rider $${SUMMAZ_PRICE_1} · 2 riders $${SUMMAZ_PRICE_2}`, countId: 'psSummazCount', minusId: 'psSummazMinus', plusId: 'psSummazPlus', minus: 'panelSummazCount(-1)', plus: 'panelSummazCount(1)', count, minDisabled: count <= 1, maxDisabled: count >= 2 })}`,
+    disabled: false,
+    btn: 'Book This Package',
+    note: ''
+  });
+}
+
+/* ── Open / close ───────────────────────────────────────── */
+function openPanel(type) {
+  if (!PKG_DETAILS[type]) return;
+  const overlay = document.getElementById('pkgPanelOverlay');
+  if (!overlay.classList.contains('is-open')) panelReturnFocus = document.activeElement;
+
+  panel.type               = type;
+  panel.beachAdults        = 0;
+  panel.beachChildren      = 0;
+  panel.jetSkiAdults       = 0;
+  panel.jetSkiRentalAdults = 0;
+  panel.jetSkiRentalSlots  = [];
+  panel.bigMableCount      = 0;
+  panel.summazCount        = 1;
+  panel.date               = '';
+
+  document.getElementById('pkgPanelContent').innerHTML = buildPanelHTML(type);
+  const scroller = document.getElementById('pkgPanelScroll');
+  if (scroller) scroller.scrollTop = 0;
+  updatePanelSidebarTotal();
+
+  overlay.classList.add('is-open');
+  overlay.setAttribute('aria-hidden', 'false');
+  document.body.style.overflow = 'hidden';
+
+  initPanelMedia();
+  initPanelBookBar();
+  setTimeout(() => {
+    const closeBtn = document.getElementById('pkgPanelClose');
+    if (closeBtn) closeBtn.focus({ preventScroll: true });
+  }, 60);
+
+  const path = '/book/' + (PANEL_SLUGS[type] || type);
+  if (window.location.pathname !== path) history.pushState({ panel: type }, '', path);
+}
+
+function closePanel() {
+  const overlay = document.getElementById('pkgPanelOverlay');
+  if (!overlay) return;
+  overlay.classList.remove('is-open');
+  overlay.setAttribute('aria-hidden', 'true');
+  document.body.style.overflow = '';
+  if (panelBookObserver) { panelBookObserver.disconnect(); panelBookObserver = null; }
+  if (panelReturnFocus && document.contains(panelReturnFocus)) panelReturnFocus.focus({ preventScroll: true });
+  panelReturnFocus = null;
+  if (window.location.pathname.startsWith('/book/')) {
+    history.pushState({}, '', '/');
+  }
+}
+
+function panelOverlayClick(e) {
+  if (e.target === document.getElementById('pkgPanelOverlay')) closePanel();
+}
+
+/* Kept for the popstate handler; the mobile booking card is inline now */
+function closePanelSheet() {}
+
+function isPanelOpen() {
+  const o = document.getElementById('pkgPanelOverlay');
+  return !!(o && o.classList.contains('is-open'));
+}
+
+/* Escape closes the top-most layer; Tab stays inside the panel */
+document.addEventListener('keydown', function(e) {
+  if (!isPanelOpen()) return;
+  const imgLb = document.getElementById('imgLightbox');
+  const vidLb = document.getElementById('vlightbox');
+  const lightboxOpen = (imgLb && imgLb.classList.contains('is-open')) || (vidLb && vidLb.classList.contains('is-open'));
+
+  if (e.key === 'Escape') {
+    if (imgLb && imgLb.classList.contains('is-open')) { closeImgLightbox(); return; }
+    if (lightboxOpen) return;
+    closePanel();
+    return;
+  }
+  if (lightboxOpen) return;
+  if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+    const track = document.getElementById('pdMediaTrack');
+    if (track && track.contains(document.activeElement)) {
+      e.preventDefault();
+      scrollPanelMedia(e.key === 'ArrowLeft' ? -1 : 1);
+    }
+    return;
+  }
+  if (e.key === 'Tab') {
+    const modal = document.getElementById('pkgPanel');
+    const focusables = [...modal.querySelectorAll('button:not([disabled]), [href], input, [tabindex]:not([tabindex="-1"])')]
+      .filter(el => el.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0], last = focusables[focusables.length - 1];
+    if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+});
+
+/* ── Media strip ────────────────────────────────────────── */
+function openPanelMedia(i) {
+  const m = panelMedia[i];
+  if (!m) return;
+  if (m.type === 'video') openPanelVideo(m.src);
+  else openImgLightbox(cldSize(m.src, 1800, 1200));
+}
+
+function panelMediaStep(track) {
+  const item = track.querySelector('.pd-media__item');
+  if (!item) return track.clientWidth;
+  const gap = parseFloat(getComputedStyle(track).columnGap) || 0;
+  return item.getBoundingClientRect().width + gap;
+}
+
+function scrollPanelMedia(dir) {
+  const track = document.getElementById('pdMediaTrack');
+  if (!track) return;
+  track.scrollBy({ left: dir * panelMediaStep(track), behavior: 'smooth' });
+}
+
+function updatePanelMediaNav() {
+  const track = document.getElementById('pdMediaTrack');
+  if (!track) return;
+  const max  = track.scrollWidth - track.clientWidth;
+  const prev = document.getElementById('pdMediaPrev');
+  const next = document.getElementById('pdMediaNext');
+  const scrollable = max > 4;
+  if (prev) prev.classList.toggle('is-hidden', !scrollable || track.scrollLeft <= 4);
+  if (next) next.classList.toggle('is-hidden', !scrollable || track.scrollLeft >= max - 4);
+
+  const dots = document.querySelectorAll('#pdMediaDots span');
+  if (dots.length) {
+    const idx = track.scrollLeft >= max - 4
+      ? dots.length - 1
+      : Math.round(track.scrollLeft / panelMediaStep(track));
+    dots.forEach((d, i) => d.classList.toggle('is-active', i === idx));
+  }
+}
+
+function initPanelMedia() {
+  const track = document.getElementById('pdMediaTrack');
+  if (!track) return;
+  let raf = 0;
+  track.addEventListener('scroll', () => {
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(updatePanelMediaNav);
+  }, { passive: true });
+  track.querySelectorAll('img').forEach(img => img.addEventListener('load', updatePanelMediaNav, { once: true }));
+  requestAnimationFrame(updatePanelMediaNav);
+}
+window.addEventListener('resize', () => { if (isPanelOpen()) updatePanelMediaNav(); });
+
+/* ── Mobile sticky bar: shown while the booking card is off-screen ── */
+function initPanelBookBar() {
+  const bar  = document.getElementById('panelMobileBar');
+  const card = document.getElementById('pdBook');
+  if (panelBookObserver) panelBookObserver.disconnect();
+  if (!bar || !card || !('IntersectionObserver' in window)) return;
+  bar.classList.remove('is-hidden');
+  panelBookObserver = new IntersectionObserver(entries => {
+    entries.forEach(en => bar.classList.toggle('is-hidden', en.isIntersecting));
+  }, { root: document.getElementById('pkgPanelScroll'), threshold: 0.25 });
+  panelBookObserver.observe(card);
+}
+
+function scrollToPanelBook() {
+  const card = document.getElementById('pdBook');
+  if (!card) return;
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  flashPanelBook();
+}
+
+function flashPanelBook() {
+  const card = document.getElementById('pdBook');
+  if (!card) return;
+  card.classList.remove('is-flash');
+  void card.offsetWidth;
+  card.classList.add('is-flash');
+}
+
+/* ── FAQ accordion ──────────────────────────────────────── */
+function togglePanelFaq(btn) {
+  const open = btn.getAttribute('aria-expanded') !== 'true';
+  btn.setAttribute('aria-expanded', String(open));
+  btn.parentElement.classList.toggle('is-open', open);
+}
+
+/* ── Pricing tiers ──────────────────────────────────────── */
+function panelTierClick(i) {
+  const d = PKG_DETAILS[panel.type];
+  const t = d && d.tiers[i];
+  if (!t) return;
+  const a = t.act;
+  if (a.kind === 'summaz') {
+    panelSummazCount(a.value - panel.summazCount);
+  } else if (a.kind === 'count') {
+    panelCount(a.field, 1);
+  } else if (a.kind === 'jsr') {
+    panel.jetSkiRentalSlots.push({ duration: a.dur, price: JETSKI_RENTAL_PRICES[a.dur] });
+    panelJSRCount(0);
+  } else if (a.kind === 'mable') {
+    panelBigMableCount(a.value ? a.value - panel.bigMableCount : 1);
+  }
+  flashPanelBook();
+}
+
+function syncPanelTiers() {
+  const d = PKG_DETAILS[panel.type];
+  if (!d) return;
+  document.querySelectorAll('.pd-tier').forEach(el => {
+    const t = d.tiers[Number(el.dataset.tier)];
+    if (!t) return;
+    const a = t.act;
+    let active = false, n = 0;
+    if (a.kind === 'summaz')      active = panel.summazCount === a.value;
+    else if (a.kind === 'count')  { n = panel[a.field]; active = n > 0; }
+    else if (a.kind === 'jsr')    { n = panel.jetSkiRentalSlots.filter(s => s.duration === a.dur).length; active = n > 0; }
+    else if (a.kind === 'mable')  { active = a.value ? panel.bigMableCount === a.value : panel.bigMableCount > 0 && panel.bigMableCount < 6; n = a.value ? 0 : panel.bigMableCount; }
+    el.classList.toggle('is-active', active);
+    el.setAttribute('aria-pressed', String(active));
+    const badge = el.querySelector('.pd-tier__badge');
+    if (badge) {
+      badge.hidden = !(n > 0 && active);
+      badge.textContent = n > 0 ? `× ${n}` : '';
+    }
+  });
 }
 
 /* ── Panel counter functions ────────────────────────────── */
+function setPanelBookBtn(disabled, text) {
+  const btn = document.getElementById('psPanelBookBtn');
+  if (!btn) return;
+  btn.disabled = disabled;
+  btn.textContent = text;
+}
+
 function panelCount(field, delta) {
   const newVal = Math.max(0, panel[field] + delta);
   panel[field] = newVal;
@@ -2205,11 +2343,11 @@ function panelCount(field, delta) {
   const minBtn  = document.getElementById(minMap[field]);
   if (countEl) countEl.textContent = newVal;
   if (minBtn)  minBtn.disabled = newVal <= 0;
+  setPanelBookBtn(panelTotal() === 0, familyBookBtnText());
   updatePanelSidebarTotal();
 }
 
 function panelJSRCount(delta) {
-  const newVal = Math.max(0, panel.jetSkiRentalAdults + delta);
   if (delta > 0) {
     panel.jetSkiRentalSlots.push({ duration: 30, price: JETSKI_RENTAL_PRICES[30] });
   } else if (delta < 0 && panel.jetSkiRentalSlots.length > 0) {
@@ -2224,12 +2362,7 @@ function panelJSRCount(delta) {
 
   renderPanelJSRSlots();
   updatePanelSidebarTotal();
-
-  const bookBtn = document.getElementById('psPanelBookBtn');
-  if (bookBtn) {
-    bookBtn.disabled = panel.jetSkiRentalAdults === 0;
-    bookBtn.textContent = panel.jetSkiRentalAdults === 0 ? 'Add riders to book' : 'Book This Package';
-  }
+  setPanelBookBtn(panel.jetSkiRentalAdults === 0, panel.jetSkiRentalAdults === 0 ? 'Add riders to book' : 'Book This Package');
 }
 
 function setPanelRiderDuration(idx, dur) {
@@ -2237,8 +2370,10 @@ function setPanelRiderDuration(idx, dur) {
   panel.jetSkiRentalSlots[idx] = { duration: dur, price: JETSKI_RENTAL_PRICES[dur] };
   const slotEl = document.getElementById(`psJSRSlot${idx}`);
   if (slotEl) {
-    slotEl.querySelectorAll('.ps-rider-slot__opt').forEach(btn => {
-      btn.classList.toggle('is-selected', parseInt(btn.dataset.duration) === dur);
+    slotEl.querySelectorAll('.pd-slot__opt').forEach(btn => {
+      const on = parseInt(btn.dataset.duration, 10) === dur;
+      btn.classList.toggle('is-selected', on);
+      btn.setAttribute('aria-pressed', String(on));
     });
   }
   updatePanelSidebarTotal();
@@ -2247,20 +2382,47 @@ function setPanelRiderDuration(idx, dur) {
 function renderPanelJSRSlots() {
   const container = document.getElementById('psJSRSlots');
   if (!container) return;
-  container.innerHTML = panel.jetSkiRentalSlots.map((slot, i) => `
-    <div class="ps-rider-slot" id="psJSRSlot${i}">
-      <div class="ps-rider-slot__label">Rider ${i + 1}</div>
-      <div class="ps-rider-slot__options">
-        <button class="ps-rider-slot__opt ${slot.duration === 30 ? 'is-selected' : ''}" data-duration="30" onclick="setPanelRiderDuration(${i},30)">30 min<br>$105</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 45 ? 'is-selected' : ''}" data-duration="45" onclick="setPanelRiderDuration(${i},45)">45 min<br>$125</button>
-        <button class="ps-rider-slot__opt ${slot.duration === 60 ? 'is-selected' : ''}" data-duration="60" onclick="setPanelRiderDuration(${i},60)">60 min<br>$190</button>
-      </div>
-    </div>`).join('');
+  container.innerHTML = panel.jetSkiRentalSlots.map(jsrSlotHTML).join('');
 }
 
 function updatePanelSidebarTotal() {
-  const el = document.getElementById('psPanelTotal');
-  if (el) el.textContent = formatMoney(panelTotal());
+  const total = formatMoney(panelTotal());
+  const el  = document.getElementById('psPanelTotal');
+  const bar = document.getElementById('pdBarTotal');
+  if (el)  el.textContent  = total;
+  if (bar) bar.textContent = total;
+  syncPanelTiers();
+}
+
+function panelSummazCount(delta) {
+  const newVal = Math.max(1, Math.min(2, panel.summazCount + delta));
+  panel.summazCount = newVal;
+
+  const countEl = document.getElementById('psSummazCount');
+  const minBtn  = document.getElementById('psSummazMinus');
+  const plusBtn = document.getElementById('psSummazPlus');
+  if (countEl) countEl.textContent = newVal;
+  if (minBtn)  minBtn.disabled  = newVal <= 1;
+  if (plusBtn) plusBtn.disabled = newVal >= 2;
+
+  updatePanelSidebarTotal();
+}
+
+function panelBigMableCount(delta) {
+  const newVal = Math.max(0, Math.min(6, panel.bigMableCount + delta));
+  panel.bigMableCount = newVal;
+
+  const countEl = document.getElementById('psBigMableCount');
+  const minBtn  = document.getElementById('psBigMableMinus');
+  const plusBtn = document.getElementById('psBigMablePlus');
+  const warn    = document.getElementById('psBigMableWarn');
+  if (countEl) countEl.textContent = newVal;
+  if (minBtn)  minBtn.disabled = newVal <= 0;
+  if (plusBtn) plusBtn.disabled = newVal >= 6;
+  if (warn)    warn.hidden = newVal !== 1;
+
+  updatePanelSidebarTotal();
+  setPanelBookBtn(newVal < 2, newVal < 2 ? 'Add at least 2 riders' : 'Book This Package');
 }
 
 /* ── Book from panel ────────────────────────────────────── */
@@ -2367,6 +2529,7 @@ function submitJetSkiRentalViaWhatsApp() {
 }
 
 function showJetSkiRentalConfirmation(dateDisplay, total, cfg) {
+  bkAnimateSwap(1);
   const body   = document.getElementById('modalBody');
   const header = document.getElementById('modalHeader');
   const footer = document.getElementById('modalFooter');
@@ -2389,136 +2552,6 @@ function showJetSkiRentalConfirmation(dateDisplay, total, cfg) {
       <button class="btn btn--primary" style="margin-top:24px;width:100%;justify-content:center" onclick="closeBooking()">Close</button>
     </div>
   `;
-}
-
-function panelContentBigMable() {
-  return `
-    <span class="panel__cat-badge panel__cat-badge--solo">Individuals</span>
-    <h2 class="panel__title">Big Mable Tube Ride</h2>
-    <div class="panel__desc">
-      <p>Up to 6 riders pile onto one giant inflatable tube and get towed through open water by a jet ski. It's loud, wet, and fast. A 10 to 12 minute ride that everyone remembers.</p>
-      <p>Great for families with kids, friend groups, or anyone who wants a break from the beach chairs. Ages 7 and up. Combined weight limit of 600 lb per ride.</p>
-    </div>
-    <span class="panel__section-label">What's Included</span>
-    <ul class="panel__included-list">
-      <li class="panel__included-item">10 to 12 minute tube ride</li>
-      <li class="panel__included-item">Up to 6 riders per tube</li>
-      <li class="panel__included-item">Life jackets provided</li>
-      <li class="panel__included-item">Jet ski tow crew on board</li>
-    </ul>
-    <span class="panel__section-label">Experience</span>
-    ${experienceHTML(PANEL_VIDEOS_MABLE)}
-    <span class="panel__section-label">Questions</span>
-    <div class="panel-faq">
-      <details class="panel-faq-item">
-        <summary>What is the minimum age?</summary>
-        <p>Ages 7 and up. Children under 7 are not permitted on the Big Mable for safety reasons.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>How many people can ride at once?</summary>
-        <p>Minimum 2, maximum 6 riders per ride. The tube seats everyone together for a shared experience.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Is there a weight limit?</summary>
-        <p>Yes. The combined weight of all riders must not exceed 600 lb. Our team will confirm on arrival.</p>
-      </details>
-      <details class="panel-faq-item">
-        <summary>Do we need beach access to book this?</summary>
-        <p>No. The Big Mable Tube Ride is a standalone experience. You don't need to purchase a Beach Access Package to book it.</p>
-      </details>
-    </div>
-  `;
-}
-
-function panelSidebarBigMable() {
-  const today = todayInBahamas();
-  const count = panel.bigMableCount;
-  return `
-    <div class="ps-title">Big Mable Tube Ride</div>
-    <div class="ps-subtitle">2 to 6 riders per ride · Ages 7+</div>
-    <span class="ps-section-label">Riders</span>
-    <div class="ps-counter-row" style="border-top:1px solid #e5e9ef">
-      <div>
-        <div class="ps-counter-name">Riders (Ages 7+)</div>
-        <div class="ps-counter-price">$${BIG_MABLE_PRICE} per person · max 6</div>
-      </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psBigMableMinus" onclick="panelBigMableCount(-1)" ${count <= 0 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psBigMableCount">${count}</span>
-        <button class="ps-stepper-btn" id="psBigMablePlus" onclick="panelBigMableCount(1)" ${count >= 6 ? 'disabled' : ''}>+</button>
-      </div>
-    </div>
-    ${count === 1 ? '<p style="font-size:12px;color:#c05621;padding:8px 0 0;margin:0">Minimum 2 riders required.</p>' : ''}
-    <div class="ps-total-row">
-      <span class="ps-total-label">Total</span>
-      <span class="ps-total-amount" id="psPanelTotal">${formatMoney(panelTotal())}</span>
-    </div>
-    <button class="ps-book-btn" id="psPanelBookBtn" onclick="bookFromPanel()" ${count < 2 ? 'disabled' : ''}>
-      ${count < 2 ? 'Add at least 2 riders' : 'Book This Package'}
-    </button>
-    <p class="ps-note">600 lb combined weight limit. Payment handled on arrival. Confirmed via WhatsApp.</p>
-  `;
-}
-
-function panelSidebarSummaz() {
-  const count = panel.summazCount;
-  const price = count === 2 ? SUMMAZ_PRICE_2 : SUMMAZ_PRICE_1;
-  return `
-    <div class="ps-title">The Summaz Experience</div>
-    <div class="ps-subtitle">1 or 2 riders per session</div>
-    <span class="ps-section-label">Riders</span>
-    <div class="ps-counter-row" style="border-top:1px solid #e5e9ef">
-      <div>
-        <div class="ps-counter-name">Riders</div>
-        <div class="ps-counter-price">1 rider $200 &middot; 2 riders $275</div>
-      </div>
-      <div class="ps-stepper">
-        <button class="ps-stepper-btn" id="psSummazMinus" onclick="panelSummazCount(-1)" ${count <= 1 ? 'disabled' : ''}>−</button>
-        <span class="ps-stepper-count" id="psSummazCount">${count}</span>
-        <button class="ps-stepper-btn" id="psSummazPlus" onclick="panelSummazCount(1)" ${count >= 2 ? 'disabled' : ''}>+</button>
-      </div>
-    </div>
-    <div class="ps-total-row">
-      <span class="ps-total-label">Total</span>
-      <span class="ps-total-amount" id="psPanelTotal">${formatMoney(price)}</span>
-    </div>
-    <button class="ps-book-btn" onclick="bookFromPanel()">Book This Package</button>
-    <p class="ps-note">Payment handled after booking. Free cancellation 7 days before.</p>
-  `;
-}
-
-function panelSummazCount(delta) {
-  const newVal = Math.max(1, Math.min(2, panel.summazCount + delta));
-  panel.summazCount = newVal;
-
-  const countEl = document.getElementById('psSummazCount');
-  const minBtn  = document.getElementById('psSummazMinus');
-  const plusBtn = document.getElementById('psSummazPlus');
-  if (countEl) countEl.textContent = newVal;
-  if (minBtn)  minBtn.disabled  = newVal <= 1;
-  if (plusBtn) plusBtn.disabled = newVal >= 2;
-
-  updatePanelSidebarTotal();
-}
-
-function panelBigMableCount(delta) {
-  const newVal = Math.max(0, Math.min(6, panel.bigMableCount + delta));
-  panel.bigMableCount = newVal;
-
-  const countEl = document.getElementById('psBigMableCount');
-  const minBtn  = document.getElementById('psBigMableMinus');
-  const plusBtn = document.getElementById('psBigMablePlus');
-  if (countEl) countEl.textContent = newVal;
-  if (minBtn)  minBtn.disabled = newVal <= 0;
-  if (plusBtn) plusBtn.disabled = newVal >= 6;
-
-  updatePanelSidebarTotal();
-
-  const bookBtn = document.getElementById('psPanelBookBtn');
-  if (bookBtn) {
-    bookBtn.disabled = newVal < 2;
-    bookBtn.textContent = newVal < 2 ? 'Add at least 2 riders' : 'Book This Package';
-  }
 }
 
 /* ── Photo lightbox ──────────────────────────────────────── */
@@ -2564,6 +2597,7 @@ function submitBigMableViaWhatsApp() {
 }
 
 function showBigMableConfirmation(dateDisplay, total, cfg) {
+  bkAnimateSwap(1);
   const body   = document.getElementById('modalBody');
   const header = document.getElementById('modalHeader');
   const footer = document.getElementById('modalFooter');
@@ -2625,7 +2659,7 @@ window.addEventListener('popstate', function(e) {
   } else if (e.state && e.state.booking) {
     openBooking();
   } else {
-    if (overlay) { closePanelSheet(); overlay.classList.remove('is-open'); }
+    if (overlay) { overlay.classList.remove('is-open'); overlay.setAttribute('aria-hidden', 'true'); }
     if (modal)   modal.classList.remove('is-open');
     document.body.style.overflow = '';
   }

@@ -1409,7 +1409,7 @@ function escHtml(str) {
 
 /* ── Mobile bar: hide during hero, fade in once scrolled past */
 (function() {
-  const hero = document.querySelector('.hero');
+  const hero = document.querySelector('.d-hero');
   const bar  = document.querySelector('.mobile-bar');
   if (!hero || !bar) return;
   const obs = new IntersectionObserver(entries => {
@@ -1449,62 +1449,35 @@ async function getFeedData() {
   return data;
 }
 
+// Behold's CDN occasionally 502s on a single image: drop that card instead of showing an empty box
+function dropFeedItem(img) {
+  const item = img.closest('.d-feed__item');
+  if (item && item.parentElement && item.parentElement.children.length > 1) item.remove();
+  updateCarouselArrows();
+}
+
 function renderReels(posts) {
-  const track   = document.getElementById('beholdReelsTrack');
-  const section = document.getElementById('reels');
+  const track = document.getElementById('beholdReelsTrack');
   if (!track) return;
 
   const reels = posts.filter(p => p.mediaType === 'VIDEO' && p.isReel === true);
-  if (reels.length === 0) { if (section) section.style.display = 'none'; return; }
+  // Keep the static fallback cards if the feed has no reels
+  if (reels.length === 0) return;
 
   track.innerHTML = reels.map(reel => {
-    const thumb   = reel.thumbnailUrl || (reel.sizes && reel.sizes.medium && reel.sizes.medium.mediaUrl) || '';
-    const caption = reel.prunedCaption ? reel.prunedCaption.trim() : '';
-    const short   = caption.length > 72 ? caption.slice(0, 72) + '…' : caption;
-    return `<a href="${escHtml(reel.permalink)}" target="_blank" rel="noopener" class="reel-card">
-      <div class="reel-card__thumb">
-        ${thumb ? `<img src="${escHtml(thumb)}" alt="Summaz Escape reel" loading="lazy">` : ''}
-        <div class="reel-card__play"><svg viewBox="0 0 24 24" fill="white"><polygon points="5 3 19 12 5 21 5 3"/></svg></div>
-      </div>
-      ${short ? `<p class="reel-card__caption">${escHtml(short)}</p>` : ''}
+    // Behold-hosted sizes first: Instagram's thumbnailUrl expires
+    const sizes = reel.sizes || {};
+    const thumb = (sizes.large && sizes.large.mediaUrl) || (sizes.medium && sizes.medium.mediaUrl) || reel.thumbnailUrl || '';
+    return `<a href="${escHtml(reel.permalink)}" target="_blank" rel="noopener" class="d-feed__item">
+      ${thumb ? `<img src="${escHtml(thumb)}" alt="Summaz Escape reel" loading="lazy" onerror="dropFeedItem(this)">` : ''}
     </a>`;
   }).join('');
-
-  // Start the auto-slide after a tick so layout is calculated
-  requestAnimationFrame(() => startReelsSlider(track));
-}
-
-function startReelsSlider(strip) {
-  if (strip.children.length === 0) return;
-
-  // Clone all cards for seamless infinite loop
-  [...strip.children].forEach(card => strip.appendChild(card.cloneNode(true)));
-
-  const wrap   = strip.parentElement;
-  let pos      = 0;
-  let paused   = false;
-  const speed  = 0.55; // px per animation frame (~33px/sec at 60fps)
-
-  wrap.addEventListener('mouseenter', () => { paused = true; });
-  wrap.addEventListener('mouseleave', () => { paused = false; });
-  wrap.addEventListener('touchstart', () => { paused = true; }, { passive: true });
-  wrap.addEventListener('touchend',   () => { setTimeout(() => { paused = false; }, 1800); });
-
-  function tick() {
-    if (!paused) {
-      pos += speed;
-      const half = strip.scrollWidth / 2;
-      if (pos >= half) pos = 0;
-      strip.style.transform = `translateX(-${pos}px)`;
-    }
-    requestAnimationFrame(tick);
-  }
-  requestAnimationFrame(tick);
+  track.scrollLeft = 0;
 }
 
 function renderGallery(posts) {
-  const grid    = document.getElementById('beholdGalleryGrid');
-  const section = document.getElementById('gallery');
+  const grid = document.getElementById('beholdGalleryGrid');
+  const tab  = document.querySelector('[data-feed-tab="gallery"]');
   if (!grid) return;
 
   const items = [];
@@ -1524,18 +1497,18 @@ function renderGallery(posts) {
     }
   }
 
-  if (items.length === 0) { if (section) section.style.display = 'none'; return; }
+  if (items.length === 0) return;
 
   grid.innerHTML = items.map(it => `
-    <a href="${escHtml(it.permalink)}" target="_blank" rel="noopener" class="behold-photo">
-      <img src="${escHtml(it.url)}" alt="Summaz Escape" loading="lazy" width="${it.w}" height="${it.h}">
-      <div class="behold-photo__overlay">
-        <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"/><circle cx="12" cy="12" r="5"/><circle cx="17.5" cy="6.5" r="1" fill="white" stroke="none"/></svg>
-      </div>
+    <a href="${escHtml(it.permalink)}" target="_blank" rel="noopener" class="d-feed__item">
+      <img src="${escHtml(it.url)}" alt="Summaz Escape" loading="lazy" width="${it.w}" height="${it.h}" onerror="dropFeedItem(this)">
     </a>`).join('');
+  if (tab) tab.disabled = false;
 }
 
-(async function initBehold() {
+// Disabled: the reels and photos tabs use the static images in the markup.
+// Call initBehold() again to pull them from Instagram instead.
+async function initBehold() {
   try {
     const data = await getFeedData();
     if (data && Array.isArray(data.posts)) {
@@ -1543,13 +1516,169 @@ function renderGallery(posts) {
       renderGallery(data.posts);
     }
   } catch (e) {
+    // Static reel cards in the markup stay as the fallback
     console.error('Behold feed failed:', e);
-    const rs = document.getElementById('reels');
-    const gs = document.getElementById('gallery');
-    if (rs) rs.style.display = 'none';
-    if (gs) gs.style.display = 'none';
   }
+}
+
+/* ── Feed tabs (photos / reels) ─────────────────────────── */
+function setFeedTab(name) {
+  const tracks = { reels: 'beholdReelsTrack', gallery: 'beholdGalleryGrid' };
+  const target = document.getElementById(tracks[name]);
+  if (!target || !target.children.length) return;
+  document.querySelectorAll('[data-feed-tab]').forEach(btn => {
+    const active = btn.dataset.feedTab === name;
+    btn.classList.toggle('is-active', active);
+    btn.setAttribute('aria-selected', active);
+  });
+  Object.values(tracks).forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.hidden = el !== target;
+  });
+}
+
+document.querySelectorAll('[data-feed-tab]').forEach(btn => {
+  btn.addEventListener('click', () => { setFeedTab(btn.dataset.feedTab); updateCarouselArrows(); });
+});
+document.querySelectorAll('a[href="#gallery"]').forEach(a => {
+  a.addEventListener('click', () => setFeedTab('gallery'));
+});
+
+/* ── Carousel arrows ────────────────────────────────────── */
+function carouselTrack(id) {
+  if (id === 'feed') {
+    return [...document.querySelectorAll('.d-feed')].find(el => !el.hidden);
+  }
+  return document.getElementById(id);
+}
+
+function scrollCarousel(id, dir, count) {
+  const track = carouselTrack(id);
+  if (!track || !track.children.length) return;
+  const card = track.children[0];
+  const gap  = parseFloat(getComputedStyle(track).columnGap) || 0;
+  const step = card.getBoundingClientRect().width + gap;
+  // Move by as many whole cards as fit, at least one
+  const n = count || Math.max(1, Math.floor((track.clientWidth + gap) / step) - 1);
+  track.scrollBy({ left: dir * step * n, behavior: 'smooth' });
+}
+
+function atCarouselEnd(track) {
+  return track.scrollLeft + track.clientWidth >= track.scrollWidth - 4;
+}
+
+/* Dim an arrow when its track can't move further that way */
+function updateCarouselArrows() {
+  const ids = new Set([...document.querySelectorAll('[data-carousel-prev]')].map(b => b.dataset.carouselPrev));
+  ids.forEach(id => {
+    const track = carouselTrack(id);
+    if (!track) return;
+    const prev = document.querySelector(`[data-carousel-prev="${id}"]`);
+    const next = document.querySelector(`[data-carousel-next="${id}"]`);
+    if (prev) prev.disabled = track.scrollLeft <= 4;
+    if (next) next.disabled = atCarouselEnd(track);
+  });
+}
+document.querySelectorAll('.d-track').forEach(track => {
+  track.addEventListener('scroll', updateCarouselArrows, { passive: true });
+});
+window.addEventListener('resize', updateCarouselArrows);
+window.addEventListener('load', updateCarouselArrows);
+
+document.querySelectorAll('[data-carousel-prev]').forEach(btn => {
+  btn.addEventListener('click', () => scrollCarousel(btn.dataset.carouselPrev, -1));
+});
+document.querySelectorAll('[data-carousel-next]').forEach(btn => {
+  btn.addEventListener('click', () => scrollCarousel(btn.dataset.carouselNext, 1));
+});
+
+/* Experience strip opens with the first clip peeking in from the left */
+(function() {
+  const track = document.querySelector('[data-peek]');
+  if (!track || window.innerWidth < 1024) return;
+  requestAnimationFrame(() => {
+    const card = track.children[0];
+    const gap  = parseFloat(getComputedStyle(track).columnGap) || 0;
+    if (card) track.scrollLeft = card.getBoundingClientRect().width + gap;
+    updateCarouselArrows();
+  });
 })();
+
+const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+/* ── Carousel autoplay (reviews + Instagram feed) ───────────
+   One card every few seconds, back to the start at the end.
+   Pauses while hovered, touched, focused or off screen. */
+(function() {
+  if (prefersReducedMotion) return;
+  [['reviewsTrack', 5000], ['feed', 4000]].forEach(([id, every]) => {
+    const host = id === 'feed' ? document.getElementById('reels') : document.getElementById(id);
+    if (!host) return;
+    let paused = false, visible = false, resumeTimer;
+    const pause  = () => { paused = true; clearTimeout(resumeTimer); };
+    const resume = (delay) => { clearTimeout(resumeTimer); resumeTimer = setTimeout(() => { paused = false; }, delay); };
+    host.addEventListener('mouseenter', pause);
+    host.addEventListener('mouseleave', () => resume(800));
+    host.addEventListener('touchstart', pause, { passive: true });
+    host.addEventListener('touchend', () => resume(4000));
+    host.addEventListener('focusin', pause);
+    host.addEventListener('focusout', () => resume(800));
+    // Arrow clicks count as interaction: give the visitor time before moving again
+    document.querySelectorAll(`[data-carousel-prev="${id}"], [data-carousel-next="${id}"]`).forEach(btn => {
+      btn.addEventListener('click', () => { pause(); resume(8000); });
+    });
+    new IntersectionObserver(entries => { visible = entries[0].isIntersecting; }, { threshold: 0.3 }).observe(host);
+
+    setInterval(() => {
+      if (paused || !visible || document.hidden) return;
+      const track = carouselTrack(id);
+      if (!track || track.scrollWidth <= track.clientWidth + 4) return;
+      if (atCarouselEnd(track)) track.scrollTo({ left: 0, behavior: 'smooth' });
+      else scrollCarousel(id, 1, 1);
+    }, every);
+  });
+})();
+
+/* ── Scroll reveal ──────────────────────────────────────── */
+(function() {
+  const groups = [
+    '.d-head', '.d-title', '.d-pkg', '.d-overview__hero', '.d-overview__cols', '.d-overview__track',
+    '.d-extra', '.d-extras__link', '.d-map', '.d-bar', '.d-steps li', '.d-faq__item',
+    '.d-kids__text > *', '.d-kids__videos .d-video', '.d-experience__track', '.d-experience .d-row',
+    // The feed wrapper, not each feed: the hidden tab would never intersect and stay invisible
+    '#reels > .d-wrap-inner:not(.d-head)', '.d-reviews__track', '.d-cta__content', '.d-footer__card'
+  ];
+  const all = [...document.querySelectorAll(groups.join(','))];
+  // Skip anything nested in another reveal target so motion doesn't double up
+  const els = all.filter(el => !all.some(other => other !== el && other.contains(el)));
+  if (prefersReducedMotion || !('IntersectionObserver' in window)) return;
+
+  document.documentElement.classList.add('d-reveal-ready');
+  const obs = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (!entry.isIntersecting) return;
+      const el = entry.target;
+      // Stagger siblings that come into view together (card grids, FAQ rows)
+      const siblings = [...el.parentElement.children].filter(c => c.classList.contains('d-reveal') && !c.classList.contains('is-in'));
+      el.style.transitionDelay = Math.min(siblings.indexOf(el), 5) * 70 + 'ms';
+      el.classList.add('is-in');
+      // Hand transform back to hover effects once the reveal has played
+      el.addEventListener('transitionend', () => {
+        el.classList.remove('d-reveal', 'is-in');
+        el.style.transitionDelay = '';
+      }, { once: true });
+      obs.unobserve(el);
+    });
+  }, { rootMargin: '0px 0px -40px 0px', threshold: 0.05 });
+  els.forEach(el => { el.classList.add('d-reveal'); obs.observe(el); });
+})();
+
+/* ── Review stars ───────────────────────────────────────── */
+document.querySelectorAll('.d-stars[data-stars]').forEach(el => {
+  const n = Number(el.dataset.stars) || 5;
+  el.innerHTML = Array.from({ length: n }, () => '<img src="/assets/figma/icon-star.svg" width="16" height="16" alt="">').join('');
+  el.setAttribute('aria-label', `${n} out of 5 stars`);
+});
 
 /* ── Video lightbox ──────────────────────────────────────── */
 (function() {
@@ -2465,6 +2594,7 @@ function toggleMobileMenu() {
   const btn  = document.getElementById('navHamburger');
   const isOpen = menu.classList.toggle('is-open');
   btn.classList.toggle('is-open', isOpen);
+  nav.classList.toggle('is-menu-open', isOpen);
   btn.setAttribute('aria-expanded', isOpen);
   menu.setAttribute('aria-hidden', !isOpen);
 }
@@ -2474,9 +2604,17 @@ function closeMobileMenu() {
   const btn  = document.getElementById('navHamburger');
   menu.classList.remove('is-open');
   btn.classList.remove('is-open');
+  nav.classList.remove('is-menu-open');
   btn.setAttribute('aria-expanded', 'false');
   menu.setAttribute('aria-hidden', 'true');
 }
+
+document.addEventListener('click', function(e) {
+  if (nav.classList.contains('is-menu-open') && !nav.contains(e.target)) closeMobileMenu();
+});
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && nav.classList.contains('is-menu-open')) closeMobileMenu();
+});
 
 /* ── Panel + booking URL routing ─────────────────────── */
 window.addEventListener('popstate', function(e) {

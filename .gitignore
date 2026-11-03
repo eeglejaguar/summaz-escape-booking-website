@@ -10,7 +10,9 @@ setup-sheet.gs
 webapp.gs
 
 # Assets — served from Cloudinary, not GitHub
-assets/
+# (except the redesign's images, which the site loads from /assets/figma/)
+assets/*
+!assets/figma/
 
 # Cloudinary upload script and output (dev tooling only)
 upload-to-cloudinary.js
@@ -18,3 +20,4 @@ cloudinary-urls.json
 
 # Dependencies
 node_modules/
+.env*

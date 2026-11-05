@@ -258,7 +258,12 @@ function shell(rows) {
           ${BRAND} &nbsp;·&nbsp; Arawak Cay, Nassau, Bahamas<br>
           <a href="tel:+12428175387" style="color:#9CA3AF;text-decoration:none;">${SUPPORT_PHONE}</a>
           &nbsp;&nbsp;
-          <a href="mailto:${SUPPORT_EMAIL}" style="color:#9CA3AF;text-decoration:none;">${SUPPORT_EMAIL}</a>
+          <a href="mailto:${SUPPORT_EMAIL}" style="color:#9CA3AF;text-decoration:none;">${SUPPORT_EMAIL}</a><br>
+          <a href="https://www.instagram.com/summaz_escape/" style="color:#9CA3AF;text-decoration:underline;">Instagram</a>
+          &nbsp;·&nbsp;
+          <a href="https://www.tiktok.com/@10summaz5" style="color:#9CA3AF;text-decoration:underline;">TikTok</a>
+          &nbsp;·&nbsp;
+          <a href="https://www.facebook.com/share/1Dr89qNhrU/" style="color:#9CA3AF;text-decoration:underline;">Facebook</a>
         </p>
       </td></tr>
 

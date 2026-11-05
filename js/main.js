@@ -90,34 +90,29 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 
-/* ── Nav liquid glass ───────────────────────────────────────
-   Bends the page behind the pill's edge like a lens. Blur can't do that, so this
-   draws a displacement map for the pill's exact shape and runs the backdrop through
+/* ── Liquid glass (nav pill and glass buttons) ──────────────
+   Bends the page behind each capsule's edge like a lens. Blur can't do that, so this
+   draws a displacement map for the capsule's exact shape and runs the backdrop through
    an SVG filter. Only Chromium supports SVG filters in backdrop-filter; other
-   browsers keep the frost and rim from home.css. */
+   browsers keep the frost from home.css. The nav's Book Now sits inside the pill's
+   glass, where a backdrop filter of its own can't see the page, so it's left out. */
 (function() {
-  const pill = document.querySelector('.d-nav__pill');
-  if (!pill || !/\bChrome\//.test(navigator.userAgent)) return;
+  if (!/\bChrome\//.test(navigator.userAgent)) return;
 
+  /* Sizes for the 70px nav pill; shorter capsules get a proportionally smaller bend */
   const BEZEL = 20;   // how far in from the edge the glass bends, px
   const BEND  = 44;   // strongest shift at the very edge, px
+  const NAV_H = 70;
   const NS = 'http://www.w3.org/2000/svg';
 
   const svg = document.createElementNS(NS, 'svg');
   svg.setAttribute('aria-hidden', 'true');
   svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none';
-  svg.innerHTML = `<filter id="navGlass" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse"
-      color-interpolation-filters="sRGB" x="0" y="0">
-    <feImage result="map" preserveAspectRatio="none" x="0" y="0"/>
-    <feDisplacementMap in="SourceGraphic" in2="map" scale="${BEND * 2}" xChannelSelector="R" yChannelSelector="G"/>
-  </filter>`;
   document.body.appendChild(svg);
-  const filter = svg.querySelector('filter');
-  const image  = svg.querySelector('feImage');
 
   /* Red = sideways shift, green = up/down shift, 128 = none. Each pixel in the
      bezel points inward, strongest at the edge, tracing the capsule's curve */
-  function drawMap(w, h) {
+  function drawMap(w, h, bezel) {
     const canvas = document.createElement('canvas');
     canvas.width = w;
     canvas.height = h;
@@ -131,7 +126,7 @@ window.addEventListener('scroll', () => {
         const ox = Math.max(qx, 0), oy = Math.max(qy, 0);
         const len = Math.hypot(ox, oy) || 1;
         const depth = r - Math.hypot(ox, oy) - Math.min(Math.max(qx, qy), 0); // px in from the edge
-        const t = Math.min(Math.max(depth / BEZEL, 0), 1);
+        const t = Math.min(Math.max(depth / bezel, 0), 1);
         const pull = (1 - t) * (1 - t);
         const nx = -Math.sign(px) * ox / len, ny = -Math.sign(py) * oy / len;
         const i = (y * w + x) * 4;
@@ -145,17 +140,32 @@ window.addEventListener('scroll', () => {
     return canvas.toDataURL();
   }
 
-  function apply() {
-    const w = Math.round(pill.offsetWidth), h = Math.round(pill.offsetHeight);
-    if (!w || !h) return;
-    filter.setAttribute('width', w);
-    filter.setAttribute('height', h);
-    image.setAttribute('width', w);
-    image.setAttribute('height', h);
-    image.setAttribute('href', drawMap(w, h));
-    pill.style.backdropFilter = 'url(#navGlass) blur(2px) saturate(1.05)';
+  /* One filter per capsule size: most buttons share a size, so they share a map */
+  function filterFor(w, h) {
+    const id = `liquidGlass-${w}x${h}`;
+    if (!document.getElementById(id)) {
+      const scale = Math.min(h / NAV_H, 1);
+      svg.insertAdjacentHTML('beforeend', `<filter id="${id}" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse"
+          color-interpolation-filters="sRGB" x="0" y="0" width="${w}" height="${h}">
+        <feImage result="map" preserveAspectRatio="none" x="0" y="0" width="${w}" height="${h}" href="${drawMap(w, h, BEZEL * scale)}"/>
+        <feDisplacementMap in="SourceGraphic" in2="map" scale="${BEND * 2 * scale}" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>`);
+    }
+    return id;
   }
-  new ResizeObserver(apply).observe(pill);
+
+  const observer = new ResizeObserver(entries => {
+    entries.forEach(({ target }) => {
+      const w = target.offsetWidth, h = target.offsetHeight;
+      if (w && h) target.style.backdropFilter = `url(#${filterFor(w, h)}) blur(2px) saturate(1.05)`;
+    });
+  });
+  /* Waits for the page's scripts so the carousels' cloned cards are included */
+  document.addEventListener('DOMContentLoaded', () => {
+    document.querySelectorAll(
+      '.d-nav__pill, .d-btn--glass:not(.d-nav__book), .d-arrow, .d-video__play, .d-overview__play, .d-fab'
+    ).forEach(el => observer.observe(el));
+  });
 })();
 
 /* ── Sidebar booking widget ─────────────────────────────── */

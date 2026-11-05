@@ -36,7 +36,6 @@ let state = {
   addons:             [],
   notes:              '',
   policyAccepted:     false,
-  paymentMethod:      '',
   honeypot:           '',
   currentStep:        1,
   reference:          '',
@@ -91,6 +90,74 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 
+/* ── Nav liquid glass ───────────────────────────────────────
+   Bends the page behind the pill's edge like a lens. Blur can't do that, so this
+   draws a displacement map for the pill's exact shape and runs the backdrop through
+   an SVG filter. Only Chromium supports SVG filters in backdrop-filter; other
+   browsers keep the frost and rim from home.css. */
+(function() {
+  const pill = document.querySelector('.d-nav__pill');
+  if (!pill || !/\bChrome\//.test(navigator.userAgent)) return;
+
+  const BEZEL = 20;   // how far in from the edge the glass bends, px
+  const BEND  = 44;   // strongest shift at the very edge, px
+  const NS = 'http://www.w3.org/2000/svg';
+
+  const svg = document.createElementNS(NS, 'svg');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.style.cssText = 'position:absolute;width:0;height:0;pointer-events:none';
+  svg.innerHTML = `<filter id="navGlass" filterUnits="userSpaceOnUse" primitiveUnits="userSpaceOnUse"
+      color-interpolation-filters="sRGB" x="0" y="0">
+    <feImage result="map" preserveAspectRatio="none" x="0" y="0"/>
+    <feDisplacementMap in="SourceGraphic" in2="map" scale="${BEND * 2}" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>`;
+  document.body.appendChild(svg);
+  const filter = svg.querySelector('filter');
+  const image  = svg.querySelector('feImage');
+
+  /* Red = sideways shift, green = up/down shift, 128 = none. Each pixel in the
+     bezel points inward, strongest at the edge, tracing the capsule's curve */
+  function drawMap(w, h) {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    const img = ctx.createImageData(w, h);
+    const r = h / 2;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const px = x + .5 - w / 2, py = y + .5 - h / 2;
+        const qx = Math.abs(px) - (w / 2 - r), qy = Math.abs(py) - (h / 2 - r);
+        const ox = Math.max(qx, 0), oy = Math.max(qy, 0);
+        const len = Math.hypot(ox, oy) || 1;
+        const depth = r - Math.hypot(ox, oy) - Math.min(Math.max(qx, qy), 0); // px in from the edge
+        const t = Math.min(Math.max(depth / BEZEL, 0), 1);
+        const pull = (1 - t) * (1 - t);
+        const nx = -Math.sign(px) * ox / len, ny = -Math.sign(py) * oy / len;
+        const i = (y * w + x) * 4;
+        img.data[i]     = 128 + 127 * pull * nx;
+        img.data[i + 1] = 128 + 127 * pull * ny;
+        img.data[i + 2] = 128;
+        img.data[i + 3] = 255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    return canvas.toDataURL();
+  }
+
+  function apply() {
+    const w = Math.round(pill.offsetWidth), h = Math.round(pill.offsetHeight);
+    if (!w || !h) return;
+    filter.setAttribute('width', w);
+    filter.setAttribute('height', h);
+    image.setAttribute('width', w);
+    image.setAttribute('height', h);
+    image.setAttribute('href', drawMap(w, h));
+    pill.style.backdropFilter = 'url(#navGlass) blur(2px) saturate(1.05)';
+  }
+  new ResizeObserver(apply).observe(pill);
+})();
+
 /* ── Sidebar booking widget ─────────────────────────────── */
 (function() {
   updateSidebarMinusButtons();
@@ -138,25 +205,35 @@ let previousFocus = null;
 let _formOpenedAt = 0;
 
 function openBooking(pkg) {
-  _formOpenedAt = Date.now();
   previousFocus = document.activeElement;
-  const savedDate = state.date;
-  resetState();
-  state.date = savedDate;
-  if (pkg) state.selectedPackage = pkg;
-  state.currentStep = 1;
-  updateModalProgress(1);
-  renderStep(1);
+  // Closed part-way through? Pick up where they left off, unless they chose another package
+  const resuming = state.selectedPackage && !state.reference && (!pkg || pkg === state.selectedPackage);
+  if (!resuming) {
+    _formOpenedAt = Date.now();
+    const savedDate = state.date;
+    resetState();
+    state.date = savedDate;
+    if (pkg) state.selectedPackage = pkg;
+    state.currentStep = 1;
+  }
+  updateModalProgress(state.currentStep);
+  renderStep(state.currentStep);
   document.getElementById('bookingModal').classList.add('is-open');
   document.body.style.overflow = 'hidden';
   history.pushState({ booking: true }, '', '/book');
+  focusBookingModal();
+}
+
+function focusBookingModal() {
   setTimeout(() => {
-    const first = document.querySelector('#modalPanel button, #modalPanel input');
+    const first = document.querySelector('#modalBody input, #modalBody button, #modalHeader button');
     if (first) first.focus();
   }, 350);
 }
 
 function closeBooking() {
+  // A payment is being submitted: closing now would hide its result
+  if (document.getElementById('loadingOverlay').classList.contains('is-visible')) return;
   document.getElementById('bookingModal').classList.remove('is-open');
   document.body.style.overflow = '';
   if (previousFocus) previousFocus.focus();
@@ -165,9 +242,14 @@ function closeBooking() {
   }
 }
 
-/* Close on overlay click */
+/* Close on overlay click. The press must start on the overlay too: a drag that starts
+   in a field and ends outside (selecting text) also fires a click on the overlay */
+let pressedOverlay = false;
+document.getElementById('bookingModal').addEventListener('mousedown', function(e) {
+  pressedOverlay = e.target === this;
+});
 document.getElementById('bookingModal').addEventListener('click', function(e) {
-  if (e.target === this) closeBooking();
+  if (e.target === this && pressedOverlay) closeBooking();
 });
 
 /* Close on Escape */
@@ -193,15 +275,14 @@ function resetState() {
   state.addons             = [];
   state.notes              = '';
   state.policyAccepted     = false;
-  state.paymentMethod      = '';
   state.honeypot           = '';
   state.reference          = '';
   state.total              = 0;
 }
 
 /* ── Progress ────────────────────────────────────────────── */
-const STEP_LABELS = ['How many guests?', 'Pick your date', 'Your details', 'Optional extras', 'Waiver & policies', 'Payment method', 'Review & confirm'];
-const STEP_SHORT  = ['Guests', 'Date', 'Details', 'Extras', 'Waiver', 'Payment', 'Review'];
+const STEP_LABELS = ['How many guests?', 'Pick your date', 'Your details', 'Optional extras', 'Waiver & policies', 'Review & confirm', 'Pay with PayPal'];
+const STEP_SHORT  = ['Guests', 'Date', 'Details', 'Extras', 'Waiver', 'Review', 'PayPal'];
 
 function updateModalProgress(step) {
   const fill = document.getElementById('modalProgressFill');
@@ -282,7 +363,9 @@ function renderStep(step) {
   }
   // Steps can set defaults while rendering (e.g. Summaz starts at 1 rider), so total again after
   updateFooterTotal();
-  nextBtn.innerHTML = `<span>${step === 7 ? 'Confirm Booking' : 'Continue'}</span>${BK_ARROW}`;
+  // The PayPal step pays from its own buttons
+  nextBtn.style.display = step === STEPS ? 'none' : '';
+  nextBtn.innerHTML = `<span>${step === STEPS - 1 ? 'Continue to Payment' : 'Continue'}</span>${BK_ARROW}`;
   document.getElementById('modalPanel').dataset.step = step;
 
   body.scrollTop = 0;
@@ -798,70 +881,13 @@ function togglePolicy(labelEl, event) {
   if (err) err.style.display = 'none';
 }
 
-/* ── Step 6: Payment method ──────────────────────────────── */
+/* ── Step 6: Review ──────────────────────────────────────── */
 function renderStep6(body) {
-  const methods = [
-    { id: 'zelle',   label: 'Zelle',          tag: 'Send to anel@summazescape.com or scan the QR in your bank app',
-      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304826/summaz/zelle-logo.png" alt="">' },
-    { id: 'venmo',   label: 'Venmo',          tag: 'Pay @summaz-escape by username, link, or QR scan',
-      icon: '<img src="https://res.cloudinary.com/dko76z0df/image/upload/v1782304825/summaz/venmo-logo.png" alt="">' },
-    { id: 'arrival', label: 'Pay on Arrival', tag: 'Credit card machine on-site',
-      icon: '<svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6.5 15h4"/></svg>' }
-  ];
-
-  const options = methods.map(m => `
-    <label class="bk-pay ${state.paymentMethod === m.id ? 'is-selected' : ''}" onclick="selectPayment('${m.id}', this)">
-      <input type="radio" name="paymentMethod" value="${m.id}" ${state.paymentMethod === m.id ? 'checked' : ''}>
-      <span class="bk-pay__radio"></span>
-      <span class="bk-pay__icon">${m.icon}</span>
-      <span class="bk-pay__info">
-        <span class="bk-pay__name">${m.label}</span>
-        <span class="bk-pay__tag">${m.tag}</span>
-      </span>
-    </label>
-  `).join('');
-
-  body.innerHTML = `
-    <p class="step-sub">Zelle and Venmo are settled after booking. You'll receive full instructions and a QR code on the next screen and by email. Pay on Arrival means a card machine at the beach.</p>
-    <div class="bk-pay-panel">
-      <div class="bk-list" role="radiogroup" aria-label="Payment method">${options}</div>
-      <div class="payment-note is-arrival bk-pay-note" id="arrivalNote">
-        You'll pay by credit card machine when you arrive. Our team will call to confirm your booking shortly after you submit.
-      </div>
-    </div>
-    <p class="form-error" id="paymentErr">Please select a payment method.</p>
-  `;
-  if (state.paymentMethod === 'arrival') updatePaymentNotes('arrival');
-}
-
-function selectPayment(id, labelEl) {
-  state.paymentMethod = id;
-  document.querySelectorAll('.bk-pay').forEach(el => el.classList.remove('is-selected'));
-  labelEl.classList.add('is-selected');
-  labelEl.querySelector('input[type="radio"]').checked = true;
-  updatePaymentNotes(id);
-  const err = document.getElementById('paymentErr');
-  if (err) err.style.display = 'none';
-}
-
-function updatePaymentNotes(id) {
-  ['zelleNote','venmoNote','arrivalNote'].forEach(n => {
-    const el = document.getElementById(n);
-    if (el) el.classList.remove('is-visible');
-  });
-  const map = { zelle: 'zelleNote', venmo: 'venmoNote', arrival: 'arrivalNote' };
-  const target = document.getElementById(map[id]);
-  if (target) target.classList.add('is-visible');
-}
-
-/* ── Step 7: Review ──────────────────────────────────────── */
-function renderStep7(body) {
   const total = calcTotal();
   const addonLabels = state.addons.map(id => {
     const a = ADDON_LIST.find(x => x.id === id);
     return a ? a.label : id;
   });
-  const paymentLabel = { zelle: 'Zelle', venmo: 'Venmo', arrival: 'Pay on Arrival' };
   const dateDisplay = state.date ? new Date(state.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : 'Not set';
   const isJSR    = state.selectedPackage === 'jetSkiRental';
   const isMable  = state.selectedPackage === 'bigMable';
@@ -904,8 +930,7 @@ function renderStep7(body) {
         ${mableAddonRow}`;
 
   body.innerHTML = `
-    <p class="step-sub">Everything look right? Hit Confirm Booking when you're ready.</p>
-    <div class="submit-error" id="submitError"></div>
+    <p class="step-sub">Everything look right? Continue to pay with PayPal.</p>
     <p class="bk-label">Booking Details</p>
     <div class="review-card bk-box">
       <div class="review-card__rows">
@@ -941,11 +966,54 @@ function renderStep7(body) {
         </div>
         <div class="review-row">
           <span class="review-row__label">Payment</span>
-          <span class="review-row__value">${paymentLabel[state.paymentMethod] || 'Not selected'}</span>
+          <span class="review-row__value">PayPal</span>
         </div>
       </div>
     </div>
   `;
+}
+
+/* ── Step 7: PayPal (mockup) ─────────────────────────────────
+   Stand-in for the real PayPal buttons. It never asks for a login or card
+   details: both buttons just pretend PayPal approved, then submit the booking.
+   To go live, swap payWithPayPalMock() for the PayPal SDK's approval callback. */
+function renderStep7(body) {
+  const dateDisplay = state.date ? new Date(state.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' }) : 'Not set';
+  body.innerHTML = `
+    <p class="step-sub">Last step. Pay with your PayPal balance, or with a debit or credit card through PayPal.</p>
+    <div class="submit-error" id="submitError"></div>
+    <p class="bk-paypal__demo"><strong>Demo checkout.</strong> This is a mockup of the PayPal step. No money is taken.</p>
+    <div class="review-card bk-box">
+      <div class="review-card__rows">
+        <div class="review-row">
+          <span class="review-row__label">Paying</span>
+          <span class="review-row__value">Summaz Escape</span>
+        </div>
+        <div class="review-row">
+          <span class="review-row__label">Visit date</span>
+          <span class="review-row__value">${dateDisplay}</span>
+        </div>
+      </div>
+      <div class="review-total">
+        <span class="review-total__label">Total due</span>
+        <span class="review-total__amount">${formatMoney(calcTotal())}</span>
+      </div>
+    </div>
+    <div class="bk-paypal__actions">
+      <button type="button" class="bk-paypal__btn bk-paypal__btn--gold" onclick="payWithPayPalMock()" aria-label="Pay with PayPal">
+        <span>Pay with</span> <span class="bk-paypal__mark"><b>Pay</b><b>Pal</b></span>
+      </button>
+      <button type="button" class="bk-paypal__btn bk-paypal__btn--card" onclick="payWithPayPalMock()">Debit or Credit Card</button>
+    </div>
+    <p class="bk-hint bk-paypal__note">Your PayPal login and card details are only ever entered with PayPal, never on this site.</p>
+  `;
+}
+
+function payWithPayPalMock() {
+  const loading = document.getElementById('loadingOverlay');
+  if (loading.classList.contains('is-visible')) return;
+  loading.classList.add('is-visible');
+  setTimeout(submitBooking, 900);
 }
 
 /* ── Validation helpers ──────────────────────────────────── */
@@ -1066,14 +1134,6 @@ async function validateStep(step) {
       }
       return true;
 
-    case 6:
-      if (!state.paymentMethod) {
-        const err = document.getElementById('paymentErr');
-        if (err) err.style.display = 'block';
-        return false;
-      }
-      return true;
-
     default: return true;
   }
 }
@@ -1081,11 +1141,6 @@ async function validateStep(step) {
 /* ── Navigation ─────────────────────────────────────────── */
 async function nextStep() {
   if (!await validateStep(state.currentStep)) return;
-
-  if (state.currentStep === 7) {
-    submitBooking();
-    return;
-  }
 
   state.currentStep++;
   renderStep(state.currentStep);
@@ -1122,7 +1177,7 @@ function submitBooking() {
     addons:         addonStr,
     notes:          state.notes.trim(),
     policyAccepted: true,
-    paymentMethod:  state.paymentMethod,
+    paymentMethod:  'paypal',
     total:          calcTotal(),
     honeypot:       state.honeypot,
     elapsed:        Date.now() - _formOpenedAt
@@ -1130,7 +1185,8 @@ function submitBooking() {
 
   const scriptUrl = window.SUMMAZ_CONFIG?.scriptUrl;
 
-  if (!scriptUrl || scriptUrl === 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+  const isLocal = ['localhost', '127.0.0.1'].includes(location.hostname);
+  if (!scriptUrl || scriptUrl === 'YOUR_APPS_SCRIPT_WEB_APP_URL' || isLocal) {
     // Dev mode: simulate a successful response
     setTimeout(() => {
       loading.classList.remove('is-visible');
@@ -1180,7 +1236,6 @@ function showConfirmation(data) {
   state.total     = data.total || calcTotal();
 
   const cfg    = window.SUMMAZ_CONFIG || {};
-  const method = state.paymentMethod;
   const ref    = data.reference;
   const total  = formatMoney(state.total);
 
@@ -1188,45 +1243,12 @@ function showConfirmation(data) {
     ? new Date(state.date + 'T12:00:00').toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' })
     : '';
 
-  let instructions = '';
-  if (method === 'zelle') {
-    instructions = `
-      <div class="confirmation__instructions">
-        <p>Open Zelle and send <strong>${total}</strong> to <strong>${escHtml(cfg.zelle)}</strong>. Or scan the QR code below in your bank's app to send the payment directly into our Zelle:</p>
-        <img src="${escHtml(cfg.zelleQr)}" alt="Zelle QR code" class="confirmation__qr">
-        <p style="margin-top:16px;font-weight:600;">Then send us your payment screenshot:</p>
-        <ol>
-          <li>Reply to your confirmation email with your screenshot attached. In the message body write: <strong>Payment for ${escHtml(ref)}</strong></li>
-          <li>Or send a new email to <strong><a href="mailto:${cfg.bookingEmail}">${cfg.bookingEmail}</a></strong> with subject <strong>Payment for ${escHtml(ref)}</strong> and your screenshot attached.</li>
-        </ol>
-        <p style="margin-top:10px;font-size:13px;color:var(--text-muted);">Your reservation holds for 24 hours. Once we receive your screenshot, we'll confirm your booking.</p>
-      </div>
-    `;
-  } else if (method === 'venmo') {
-    instructions = `
-      <div class="confirmation__instructions">
-        <p>Send <strong>${total}</strong> to <strong>${escHtml(cfg.venmo)}</strong> on Venmo. You can also <a href="${cfg.venmoUrl}" target="_blank" rel="noopener" style="color:#0077B6;">click here to open Venmo</a>, or scan the QR code below to pay directly:</p>
-        <img src="${escHtml(cfg.venmoQr)}" alt="Venmo QR code" class="confirmation__qr">
-        <p style="margin-top:16px;font-weight:600;">Then send us your payment screenshot:</p>
-        <ol>
-          <li>Reply to your confirmation email with your screenshot attached. In the message body write: <strong>Payment for ${escHtml(ref)}</strong></li>
-          <li>Or send a new email to <strong><a href="mailto:${cfg.bookingEmail}">${cfg.bookingEmail}</a></strong> with subject <strong>Payment for ${escHtml(ref)}</strong> and your screenshot attached.</li>
-        </ol>
-        <p style="margin-top:10px;font-size:13px;color:var(--text-muted);">Your reservation holds for 24 hours. Once we receive your screenshot, we'll confirm your booking.</p>
-      </div>
-    `;
-  } else {
-    instructions = `
-      <div class="confirmation__instructions">
-        <p>Your spot is reserved. No payment needed until you arrive. Bring your card on the day.</p>
-        <p style="margin-top:12px;font-weight:600;">To confirm your place:</p>
-        <ol>
-          <li>Reply to your confirmation email with <strong>Confirmed ${escHtml(ref)}</strong> in the message body.</li>
-          <li>Or email <strong><a href="mailto:${cfg.bookingEmail}">${cfg.bookingEmail}</a></strong> with subject <strong>Confirmed ${escHtml(ref)}</strong>.</li>
-        </ol>
-      </div>
-    `;
-  }
+  const instructions = `
+    <div class="confirmation__instructions">
+      <p class="bk-paypal__demo"><strong>Demo checkout.</strong> No money was taken. The live version takes the <strong>${total}</strong> through PayPal here.</p>
+      <p style="margin-top:10px;">Questions? Email <strong><a href="mailto:${cfg.bookingEmail}">${cfg.bookingEmail}</a></strong> with your reference.</p>
+    </div>
+  `;
 
   const addonLabels = state.addons.map(id => {
     const a = ADDON_LIST.find(x => x.id === id);
@@ -1266,7 +1288,7 @@ function showConfirmation(data) {
         </div>
         <div class="confirmation__meta-item">
           <div class="confirmation__meta-label">Payment</div>
-          <div class="confirmation__meta-value">${{ zelle: 'Zelle', venmo: 'Venmo', arrival: 'On Arrival' }[method] || 'Not set'}</div>
+          <div class="confirmation__meta-value">PayPal</div>
         </div>
       </div>
       <button class="btn btn--outline btn--full confirmation__close-btn" onclick="closeBooking()">Close</button>
@@ -1485,6 +1507,17 @@ function scrollCarousel(id, dir, count) {
   const step = card.getBoundingClientRect().width + gap;
   // Move by as many whole cards as fit, at least one
   const n = count || Math.max(1, Math.floor((track.clientWidth + gap) / step) - 1);
+  if (track.dataset.loop) {
+    // Endless track: jump to the matching copy if this move would run off an end,
+    // then land on a card edge, as the track has no snapping to line it up
+    const setWidth = step * Number(track.dataset.loop);
+    let from = track.scrollLeft;
+    if (from >= setWidth) from -= setWidth;
+    if (dir < 0 && from < step * n) from += setWidth;
+    track.scrollTo({ left: from, behavior: 'instant' });
+    track.scrollTo({ left: (Math.round(from / step) + dir * n) * step, behavior: 'smooth' });
+    return;
+  }
   track.scrollBy({ left: dir * step * n, behavior: 'smooth' });
 }
 
@@ -1500,8 +1533,9 @@ function updateCarouselArrows() {
     if (!track) return;
     const prev = document.querySelector(`[data-carousel-prev="${id}"]`);
     const next = document.querySelector(`[data-carousel-next="${id}"]`);
-    if (prev) prev.disabled = track.scrollLeft <= 4;
-    if (next) next.disabled = atCarouselEnd(track);
+    const endless = Boolean(track.dataset.loop);
+    if (prev) prev.disabled = !endless && track.scrollLeft <= 4;
+    if (next) next.disabled = !endless && atCarouselEnd(track);
   });
 }
 document.querySelectorAll('.d-track').forEach(track => {
@@ -1531,13 +1565,65 @@ document.querySelectorAll('[data-carousel-next]').forEach(btn => {
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ── Carousel autoplay (reviews + Instagram feed) ───────────
+/* ── Reviews auto-slide ─────────────────────────────────────
+   Drifts continuously and loops forever: the cards are copied once, and the
+   track jumps back by one set as it reaches the copies. Eases to a stop while
+   hovered; holds while touched, off screen or after an arrow click. */
+(function() {
+  const track = document.getElementById('reviewsTrack');
+  if (prefersReducedMotion || !track) return;
+
+  const SPEED = 48; // px per second
+  const cards = [...track.children];
+  cards.forEach(card => {
+    const copy = card.cloneNode(true);
+    copy.setAttribute('aria-hidden', 'true');
+    track.appendChild(copy);
+  });
+  track.dataset.loop = cards.length;
+
+  let hovered = false, held = false, visible = false, resumeTimer;
+  let speed = 0, x = 0, last = performance.now();
+
+  const hold = (ms) => {
+    held = true;
+    speed = 0;
+    clearTimeout(resumeTimer);
+    if (ms) resumeTimer = setTimeout(() => { held = false; }, ms);
+  };
+  track.addEventListener('mouseenter', () => { hovered = true; });
+  track.addEventListener('mouseleave', () => { hovered = false; });
+  track.addEventListener('touchstart', () => hold(), { passive: true });
+  track.addEventListener('touchend', () => hold(4000));
+  document.querySelectorAll('[data-carousel-prev="reviewsTrack"], [data-carousel-next="reviewsTrack"]').forEach(btn => {
+    btn.addEventListener('click', () => hold(4000));
+  });
+  new IntersectionObserver(entries => { visible = entries[0].isIntersecting; }).observe(track);
+
+  function tick(now) {
+    requestAnimationFrame(tick);
+    const dt = Math.min((now - last) / 1000, 0.1);
+    last = now;
+    if (held || !visible || document.hidden) { speed = 0; x = track.scrollLeft; return; }
+
+    speed += ((hovered ? 0 : SPEED) - speed) * Math.min(1, dt * 6);
+    if (speed < 1) { x = track.scrollLeft; return; } // stopped: let the visitor scroll by hand
+
+    const setWidth = track.children[cards.length].offsetLeft - cards[0].offsetLeft;
+    x += speed * dt;
+    if (x >= setWidth) x -= setWidth;
+    track.scrollLeft = x;
+  }
+  requestAnimationFrame(tick);
+})();
+
+/* ── Instagram feed autoplay ────────────────────────────────
    One card every few seconds, back to the start at the end.
    Pauses while hovered, touched, focused or off screen. */
 (function() {
   if (prefersReducedMotion) return;
-  [['reviewsTrack', 5000], ['feed', 4000]].forEach(([id, every]) => {
-    const host = id === 'feed' ? document.getElementById('reels') : document.getElementById(id);
+  [['feed', 4000]].forEach(([id, every]) => {
+    const host = document.getElementById('reels');
     if (!host) return;
     let paused = false, visible = false, resumeTimer;
     const pause  = () => { paused = true; clearTimeout(resumeTimer); };
@@ -2084,7 +2170,7 @@ function panelSidebarBigMable() {
       <p class="pd-book__warn" id="psBigMableWarn" ${count === 1 ? '' : 'hidden'}>Minimum 2 riders required.</p>`,
     disabled: count < 2,
     btn: count < 2 ? 'Add at least 2 riders' : 'Book This Package',
-    note: '600 lb combined weight limit. Payment handled on arrival. Confirmed via WhatsApp.'
+    note: '600 lb combined weight limit. Pay with PayPal at checkout.'
   });
 }
 
@@ -2486,7 +2572,6 @@ function openBookingAtStep2() {
   state.addons         = [];
   state.notes          = '';
   state.policyAccepted = false;
-  state.paymentMethod  = '';
   state.honeypot       = '';
   state.reference      = '';
   state.total          = 0;
@@ -2496,10 +2581,7 @@ function openBookingAtStep2() {
   renderStep(2);
   document.getElementById('bookingModal').classList.add('is-open');
   document.body.style.overflow = 'hidden';
-  setTimeout(() => {
-    const first = document.querySelector('#modalPanel button, #modalPanel input');
-    if (first) first.focus();
-  }, 350);
+  focusBookingModal();
 }
 
 /* ── Jet Ski Rental WhatsApp submission ──────────────────── */
@@ -2655,8 +2737,10 @@ window.addEventListener('popstate', function(e) {
   const overlay = document.getElementById('pkgPanelOverlay');
   const modal   = document.getElementById('bookingModal');
   if (e.state && e.state.panel) {
+    if (modal) modal.classList.remove('is-open');
     openPanel(e.state.panel);
   } else if (e.state && e.state.booking) {
+    if (overlay) { overlay.classList.remove('is-open'); overlay.setAttribute('aria-hidden', 'true'); }
     openBooking();
   } else {
     if (overlay) { overlay.classList.remove('is-open'); overlay.setAttribute('aria-hidden', 'true'); }

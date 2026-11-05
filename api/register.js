@@ -180,7 +180,7 @@ async function sendBookingEmails(b) {
   const label       = methodName(paymentMethod);
   const suspected   = spamFlag.includes('SUSPECTED SPAM');
 
-  const guestSubject = paymentMethod === 'arrival'
+  const guestSubject = paymentMethod === 'arrival' || paymentMethod === 'paypal'
     ? `Booking received, ${firstName}. Your spot is held. | ${reference}`
     : `Booking received, ${firstName}. Send your ${label} payment to lock in your spot. | ${reference}`;
 
@@ -201,7 +201,7 @@ function h(str) {
 }
 
 function methodName(pm) {
-  return { zelle: 'Zelle', venmo: 'Venmo', arrival: 'On-Site Card' }[pm] || 'On-Site Card';
+  return { paypal: 'PayPal', zelle: 'Zelle', venmo: 'Venmo', arrival: 'On-Site Card' }[pm] || 'On-Site Card';
 }
 
 function fmtDate(dateStr) {
@@ -415,7 +415,22 @@ function guestEmail(b) {
       </p>
     </td></tr>`;
 
-  if (paymentMethod === 'zelle') {
+  if (paymentMethod === 'paypal') {
+    payBlock = `
+    <tr><td style="padding:0 36px 32px;">
+      <table width="100%" cellpadding="0" cellspacing="0" role="presentation"
+             style="background:#F0F7FF;border:2px solid #0077B6;border-radius:10px;padding:22px;">
+        <tr><td>
+          <p style="margin:0 0 10px;font-size:16px;font-weight:700;color:#111827;">
+            Paying with PayPal
+          </p>
+          <p style="margin:0;font-size:14px;color:#6B7280;line-height:1.7;">
+            Your total of <strong style="color:#111827;">${totalDisplay}</strong> is handled through PayPal. We will confirm your booking once the payment is verified.
+          </p>
+        </td></tr>
+      </table>
+    </td></tr>`;
+  } else if (paymentMethod === 'zelle') {
     payBlock = zelleBlock;
   } else if (paymentMethod === 'venmo') {
     payBlock = venmoBlock;
@@ -455,7 +470,9 @@ function guestEmail(b) {
     </td></tr>`;
   }
 
-  const intro = paymentMethod === 'arrival'
+  const intro = paymentMethod === 'paypal'
+    ? 'We got your booking. Your spot is held.'
+    : paymentMethod === 'arrival'
     ? 'Your spot is reserved. No payment is needed until you arrive.'
     : 'We got your request. Your spot is held. Send the payment to lock it in.';
 
@@ -516,7 +533,16 @@ function teamEmail(b) {
   const totalDisplay  = '$' + Number(total).toLocaleString();
   const badgeColor    = paymentMethod === 'arrival' ? '#00C4A1' : '#0077B6';
 
-  const actionBox = paymentMethod === 'arrival'
+  const actionBox = paymentMethod === 'paypal'
+    ? `<tr><td colspan="2" style="padding-top:18px;">
+        <table width="100%" cellpadding="0" cellspacing="0"
+               style="background:#FFF8E1;border:1px solid #F4A340;border-radius:8px;padding:14px 16px;">
+          <tr><td style="font-size:13px;color:#92400E;line-height:1.75;">
+            <strong>Action needed:</strong> The PayPal step is still a demo, so no money has been taken for ref <strong>${h(reference)}</strong>. Contact the guest to arrange payment of ${totalDisplay} before confirming.
+          </td></tr>
+        </table>
+      </td></tr>`
+    : paymentMethod === 'arrival'
     ? `<tr><td colspan="2" style="padding-top:18px;">
         <table width="100%" cellpadding="0" cellspacing="0"
                style="background:#FFF8E1;border:1px solid #F4A340;border-radius:8px;padding:14px 16px;">

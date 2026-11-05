@@ -144,14 +144,34 @@ body.d-page a:hover { text-decoration: none; }
   height: 70px;
   padding: 12px;
   border-radius: 208px;
+  position: relative;
   background: rgba(3,29,47,.1);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  /* Liquid glass. main.js adds edge refraction on Chromium browsers; everywhere
+     else this light frost and the rim below still read as glass */
+  backdrop-filter: blur(2px) saturate(1.25);
+  -webkit-backdrop-filter: blur(2px) saturate(1.25);
+  box-shadow:
+    inset 0 0 14px rgba(255,255,255,.14),
+    0 10px 28px -14px rgba(3,29,47,.35);
   transition: background-color .25s ease;
+}
+/* Rim light: brightest where the glass catches light at opposite corners */
+.d-nav__pill::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  padding: 1px;
+  border-radius: inherit;
+  background: linear-gradient(135deg,
+    rgba(255,255,255,.7) 0%, rgba(255,255,255,.18) 28%,
+    rgba(255,255,255,.12) 70%, rgba(255,255,255,.55) 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
 }
 /* style.css paints .nav--solid yellow; the pill handles its own background */
 .d-nav.nav--solid, .d-nav.nav--transparent { background: none; box-shadow: none; }
-.d-nav.nav--solid .d-nav__pill,
 .d-nav.is-menu-open .d-nav__pill { background: rgba(3,29,47,.72); }
 .d-nav__menu {
   display: inline-flex;
@@ -169,7 +189,12 @@ body.d-page a:hover { text-decoration: none; }
 .d-nav__menu.is-open img { transform: scaleX(.7); }
 .d-nav__logo { display: block; width: 116px; height: 44px; }
 .d-nav__logo img { width: 116px; height: 44px; }
-.d-nav__book { justify-self: end; padding: 10px 18px 10px 24px; }
+.d-nav__book {
+  justify-self: end;
+  padding: 10px 18px 10px 24px;
+  background: rgba(255,255,255,.08);
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.24), inset 0 0 10px rgba(255,255,255,.08);
+}
 
 .d-nav__menu-panel {
   margin-top: 8px;
@@ -212,16 +237,6 @@ body.d-page a:hover { text-decoration: none; }
   height: 100%;
   object-fit: cover;
   z-index: -3;
-}
-.d-hero__fade {
-  position: absolute;
-  top: 0; left: 0;
-  width: 100%;
-  height: clamp(100px, 8.5vw, 163px);
-  object-fit: cover;
-  mix-blend-mode: multiply;
-  z-index: -2;
-  pointer-events: none;
 }
 /* Cutout of the same photo, laid over the headline so the helmet overlaps it */
 .d-hero__rider {
@@ -620,6 +635,8 @@ body.d-page a:hover { text-decoration: none; }
   scroll-padding-left: var(--d-pad);
   align-items: stretch;
 }
+/* Set by the auto-slide in main.js: snapping would fight the continuous motion */
+.d-reviews__track[data-loop] { scroll-snap-type: none; scroll-behavior: auto; }
 .d-review {
   display: flex;
   flex-direction: column;
@@ -661,6 +678,36 @@ body.d-page a:hover { text-decoration: none; }
   flex-direction: column;
 }
 .d-cta .d-hero__title { margin-bottom: 0; }
+/* Cutout of the jet ski's nose, on the same canvas as cta-bg.webp */
+.d-cta__ski { display: none; }
+
+/* Scroll effect: the photo scrolls while the text sticks to the top of the
+   screen, passes behind the rider / jet ski, then stops at the section's bottom
+   padding and leaves with it. Sticky needs overflow: clip, as hidden would make
+   the section its own scroll container. Desktop only: below this the CTA text
+   sits above the jet ski and there is no cutout to pass behind. */
+@media (min-width: 1025px) {
+  .d-hero {
+    overflow: clip;
+    padding-top: clamp(130px, 10.5vw, 202px);
+    padding-bottom: clamp(48px, 8vw, 154px);
+  }
+  .d-hero__content { position: sticky; top: 0; padding-top: 0; }
+  .d-cta {
+    overflow: clip;
+    padding-bottom: 21.6vw;    /* 207px footer overlap + 208px gap above the footer */
+  }
+  .d-cta__content { position: sticky; top: 0; }
+  .d-cta__ski {
+    display: block;
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%;
+    height: auto;
+    z-index: 1;
+    pointer-events: none;
+  }
+}
 
 /* ── 15. Footer ───────────────────────────────────────────── */
 .d-footer {
@@ -748,8 +795,10 @@ body.d-page a:hover { text-decoration: none; }
 .d-hero__title    { animation: d-rise .9s cubic-bezier(.2,.7,.2,1) .15s both; }
 .d-hero__content > .d-hero__sub { animation: d-rise .9s cubic-bezier(.2,.7,.2,1) .3s both; }
 .d-hero__meta     { animation: d-rise .9s cubic-bezier(.2,.7,.2,1) .42s both; }
-.d-hero__content > .d-actions { animation: d-rise .9s cubic-bezier(.2,.7,.2,1) .54s both; }
-.d-nav            { animation: d-fade .8s ease .1s both; }
+/* backwards, not both: a held opacity animation stops backdrop-filter seeing the
+   page behind it, which would kill the glass in the nav and these buttons */
+.d-hero__content > .d-actions { animation: d-rise .9s cubic-bezier(.2,.7,.2,1) .54s backwards; }
+.d-nav            { animation: d-fade .8s ease .1s backwards; }
 .d-cta .d-hero__title { animation: none; }
 
 /* Menu links cascade in */
@@ -786,9 +835,14 @@ body.d-page { padding-bottom: 0; }
 .d-fab {
   position: fixed;
   left: 50%;
-  bottom: calc(24px + env(safe-area-inset-bottom));
+  bottom: calc(12px + env(safe-area-inset-bottom));
   z-index: 150; /* under the nav menu and the booking modal */
+  padding: 12px; /* the glass ring around the button */
   border-radius: 999px;
+  background: rgba(3,29,47,.1); /* same glass as the nav pill */
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 0 10px 28px -8px rgba(3,29,47,.45);
   transform: translate(-50%, calc(100% + 48px));
   visibility: hidden;
   transition: transform .45s cubic-bezier(.55,0,.75,.3), visibility 0s linear .45s;
@@ -807,7 +861,6 @@ body.d-page { padding-bottom: 0; }
   font-weight: 500;
   font-size: 16px;
   line-height: 20px;
-  box-shadow: 0 10px 28px -8px rgba(3,29,47,.45);
 }
 .d-fab__btn svg { width: 24px; height: 24px; flex-shrink: 0; transition: transform .2s ease; }
 .d-fab__btn:hover svg { transform: translateX(4px); }
@@ -862,7 +915,7 @@ body.d-page { padding-bottom: 0; }
   .d-tabs { gap: 12px; }
   .d-tab { padding: 14px; }
   .d-feed .d-feed__item { width: 70%; }
-  .d-fab { bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .d-fab { bottom: calc(8px + env(safe-area-inset-bottom)); padding: 8px; }
   #beholdGalleryGrid:not([hidden]) { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .d-review { padding: 28px; }
   .d-review p { font-size: 17px; }

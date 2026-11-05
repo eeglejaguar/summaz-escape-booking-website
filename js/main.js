@@ -1565,12 +1565,13 @@ document.querySelectorAll('[data-carousel-next]').forEach(btn => {
 
 const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-/* ── Reviews auto-slide ─────────────────────────────────────
+/* ── Endless auto-slide (reviews + experience clips) ────────
    Drifts continuously and loops forever: the cards are copied once, and the
    track jumps back by one set as it reaches the copies. Eases to a stop while
-   hovered; holds while touched, off screen or after an arrow click. */
-(function() {
-  const track = document.getElementById('reviewsTrack');
+   hovered; holds while touched, off screen, after an arrow click, or while a
+   video, the booking modal or a package panel is open (they all lock the page). */
+['reviewsTrack', 'expTrack'].forEach(function(id) {
+  const track = document.getElementById(id);
   if (prefersReducedMotion || !track) return;
 
   const SPEED = 48; // px per second
@@ -1578,6 +1579,7 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
   cards.forEach(card => {
     const copy = card.cloneNode(true);
     copy.setAttribute('aria-hidden', 'true');
+    if (copy.hasAttribute('tabindex')) copy.tabIndex = -1; // no duplicate keyboard stops
     track.appendChild(copy);
   });
   track.dataset.loop = cards.length;
@@ -1595,7 +1597,7 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
   track.addEventListener('mouseleave', () => { hovered = false; });
   track.addEventListener('touchstart', () => hold(), { passive: true });
   track.addEventListener('touchend', () => hold(4000));
-  document.querySelectorAll('[data-carousel-prev="reviewsTrack"], [data-carousel-next="reviewsTrack"]').forEach(btn => {
+  document.querySelectorAll(`[data-carousel-prev="${id}"], [data-carousel-next="${id}"]`).forEach(btn => {
     btn.addEventListener('click', () => hold(4000));
   });
   new IntersectionObserver(entries => { visible = entries[0].isIntersecting; }).observe(track);
@@ -1604,7 +1606,8 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
     requestAnimationFrame(tick);
     const dt = Math.min((now - last) / 1000, 0.1);
     last = now;
-    if (held || !visible || document.hidden) { speed = 0; x = track.scrollLeft; return; }
+    const pageLocked = document.body.style.overflow === 'hidden';
+    if (held || !visible || document.hidden || pageLocked) { speed = 0; x = track.scrollLeft; return; }
 
     speed += ((hovered ? 0 : SPEED) - speed) * Math.min(1, dt * 6);
     if (speed < 1) { x = track.scrollLeft; return; } // stopped: let the visitor scroll by hand
@@ -1615,7 +1618,7 @@ const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)
     track.scrollLeft = x;
   }
   requestAnimationFrame(tick);
-})();
+});
 
 /* ── Instagram feed autoplay ────────────────────────────────
    One card every few seconds, back to the start at the end.

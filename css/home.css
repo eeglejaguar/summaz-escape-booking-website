@@ -5,6 +5,10 @@
    ============================================================ */
 
 /* ── 1. Tokens ────────────────────────────────────────────── */
+@font-face { font-family: 'Visby CF'; font-weight: 500; font-style: normal; font-display: swap; src: url('/assets/fonts/VisbyCF-Medium.woff2') format('woff2'); }
+@font-face { font-family: 'Visby CF'; font-weight: 600; font-style: normal; font-display: swap; src: url('/assets/fonts/VisbyCF-DemiBold.woff2') format('woff2'); }
+@font-face { font-family: 'Visby CF'; font-weight: 700; font-style: normal; font-display: swap; src: url('/assets/fonts/VisbyCF-Bold.woff2') format('woff2'); }
+
 :root {
   --d-navy:   #031D2F;
   --d-sea:    #01A9CE;
@@ -15,7 +19,7 @@
   --d-glass:        rgba(255,255,255,.1);
   --d-glass-border: rgba(255,255,255,.2);
 
-  /* Visby CF is the design face; Urbanist is the closest free fallback */
+  /* Visby CF is the design face; Urbanist only shows if it fails to load */
   --d-display: 'Visby CF', 'Visby', 'Urbanist', system-ui, sans-serif;
   --d-text:    'DM Sans', system-ui, sans-serif;
 
@@ -145,14 +149,11 @@ body.d-page a:hover { text-decoration: none; }
   padding: 12px;
   border-radius: 208px;
   position: relative;
-  background: rgba(0,0,0,.1);
+  background: rgba(3,29,47,.1);
   /* Liquid glass. main.js adds edge refraction on Chromium browsers; everywhere
      else this light frost still reads as glass */
   backdrop-filter: blur(2px) saturate(1.25);
   -webkit-backdrop-filter: blur(2px) saturate(1.25);
-  box-shadow:
-    inset 0 0 14px rgba(255,255,255,.14),
-    0 10px 28px -14px rgba(3,29,47,.35);
   transition: background-color .25s ease;
 }
 /* style.css paints .nav--solid yellow; the pill handles its own background */
@@ -166,7 +167,7 @@ body.d-page a:hover { text-decoration: none; }
   justify-self: start;
   color: #fff;
   font-family: var(--d-display);
-  font-weight: 600;
+  font-weight: 500;
   font-size: 16px;
   line-height: 20px;
 }
@@ -174,7 +175,14 @@ body.d-page a:hover { text-decoration: none; }
 .d-nav__menu.is-open img { transform: scaleX(.7); }
 .d-nav__logo { display: block; width: 116px; height: 44px; }
 .d-nav__logo img { width: 116px; height: 44px; }
-.d-nav__book { justify-self: end; padding: 10px 18px 10px 24px; }
+.d-nav__book {
+  justify-self: end;
+  padding: 10px 18px 10px 24px;
+  /* Inside the pill's backdrop-filter, a second one only re-samples the pill's
+     tint and turns the button darker than the bar instead of whiter */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
 
 .d-nav__menu-panel {
   margin-top: 8px;
@@ -824,7 +832,7 @@ body.d-page { padding-bottom: 0; }
 .d-fab {
   position: fixed;
   left: 50%;
-  bottom: calc(12px + env(safe-area-inset-bottom));
+  bottom: calc(25px + env(safe-area-inset-bottom));
   z-index: 150; /* under the nav menu and the booking modal */
   padding: 12px; /* the glass ring around the button */
   border-radius: 999px;

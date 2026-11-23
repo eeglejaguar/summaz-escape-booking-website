@@ -371,6 +371,8 @@ function renderStep(step) {
     case 6: renderStep6(body); break;
     case 7: renderStep7(body); break;
   }
+  // Inline error slot for step-level messages (replaces browser alert popups)
+  body.insertAdjacentHTML('beforeend', '<p class="form-error step-error" id="stepErr" role="alert" aria-live="assertive"></p>');
   // Steps can set defaults while rendering (e.g. Summaz starts at 1 rider), so total again after
   updateFooterTotal();
   // The PayPal step pays from its own buttons
@@ -457,6 +459,7 @@ function renderStep1Summaz(body) {
 }
 
 function changeSummazCount(delta) {
+  clearFieldErr('stepErr');
   const newVal = Math.max(1, Math.min(2, state.summazCount + delta));
   state.summazCount = newVal;
   const price = newVal === 2 ? SUMMAZ_PRICE_2 : SUMMAZ_PRICE_1;
@@ -587,6 +590,7 @@ function jsrSummaryRowsHTML() {
 }
 
 function jsrChangeCount(delta) {
+  clearFieldErr('stepErr');
   if (delta > 0) {
     state.jetSkiRentalSlots.push({ duration: 30, price: JETSKI_RENTAL_PRICES[30] });
   } else if (delta < 0 && state.jetSkiRentalSlots.length > 0) {
@@ -625,6 +629,7 @@ function jsrSetDuration(idx, dur) {
 }
 
 function changeCount(field, delta) {
+  clearFieldErr('stepErr');
   const maxVal = field === 'bigMableCount' ? 6 : Infinity;
   const newVal = Math.max(0, Math.min(maxVal, state[field] + delta));
   state[field] = newVal;
@@ -1035,6 +1040,12 @@ function showFieldErr(id, msg) {
   el.style.display = 'block';
 }
 
+function showStepErr(msg) {
+  showFieldErr('stepErr', msg);
+  const el = document.getElementById('stepErr');
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
 function clearFieldErr(id) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -1046,33 +1057,34 @@ function clearFieldErr(id) {
 async function validateStep(step) {
   switch (step) {
     case 1:
+      clearFieldErr('stepErr');
       if (!state.selectedPackage) {
-        alert('Please select a package to continue.');
+        showStepErr('Please select a package to continue.');
         return false;
       }
       if (state.selectedPackage === 'jetSkiRental') {
         if (state.jetSkiRentalSlots.length === 0) {
-          alert('Please add at least one rider.');
+          showStepErr('Please add at least one rider.');
           return false;
         }
         return true;
       }
       if (state.selectedPackage === 'bigMable') {
         if (state.bigMableCount < 2) {
-          alert('Big Mable requires a minimum of 2 riders. Please add at least 2.');
+          showStepErr('Big Mable requires a minimum of 2 riders. Please add at least 2.');
           return false;
         }
         return true;
       }
       if (state.selectedPackage === 'summaz') {
         if (state.summazCount < 1) {
-          alert('Please add at least 1 rider.');
+          showStepErr('Please add at least 1 rider.');
           return false;
         }
         return true;
       }
       if (state.beachAdults + state.beachChildren + state.jetSkiAdults < 1) {
-        alert('Please add at least one guest.');
+        showStepErr('Please add at least one guest.');
         return false;
       }
       return true;
@@ -2119,6 +2131,7 @@ function pdBookHTML(o) {
     ${o.body}
     <div class="pd-book__total"><span>Total</span><strong id="psPanelTotal">${formatMoney(panelTotal())}</strong></div>
     <button type="button" class="pd-book__btn" id="psPanelBookBtn" onclick="bookFromPanel()" ${o.disabled ? 'disabled' : ''}>${o.btn}</button>
+    <p class="form-error pd-book__err" id="psPanelErr" role="alert" aria-live="assertive"></p>
     ${o.note ? `<p class="pd-book__note">${o.note}</p>` : ''}`;
 }
 
@@ -2427,6 +2440,7 @@ function syncPanelTiers() {
 
 /* ── Panel counter functions ────────────────────────────── */
 function setPanelBookBtn(disabled, text) {
+  clearFieldErr('psPanelErr');
   const btn = document.getElementById('psPanelBookBtn');
   if (!btn) return;
   btn.disabled = disabled;
@@ -2526,10 +2540,11 @@ function panelBigMableCount(delta) {
 
 /* ── Book from panel ────────────────────────────────────── */
 function bookFromPanel() {
+  clearFieldErr('psPanelErr');
 
   if (panel.type === 'jetSkiRental') {
     if (panel.jetSkiRentalAdults === 0) {
-      alert('Please add at least one rider.');
+      showFieldErr('psPanelErr', 'Please add at least one rider.');
       return;
     }
     state.selectedPackage   = 'jetSkiRental';
@@ -2540,7 +2555,7 @@ function bookFromPanel() {
     state.bigMableCount     = 0;
   } else if (panel.type === 'bigMable') {
     if (panel.bigMableCount < 2) {
-      alert('Big Mable requires a minimum of 2 riders.');
+      showFieldErr('psPanelErr', 'Big Mable requires a minimum of 2 riders.');
       return;
     }
     state.selectedPackage   = 'bigMable';
@@ -2559,7 +2574,7 @@ function bookFromPanel() {
     state.jetSkiRentalSlots = [];
   } else {
     if (panelTotal() === 0) {
-      alert('Please add at least one guest.');
+      showFieldErr('psPanelErr', 'Please add at least one guest.');
       return;
     }
     state.selectedPackage   = panel.type;

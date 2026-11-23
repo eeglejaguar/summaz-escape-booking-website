@@ -706,3 +706,7 @@
 @media (prefers-reduced-motion: reduce) {
   #bookingModal .modal, #bookingModal .modal-progress-fill { transition: none; }
 }
+
+/* Inline step-level error (replaces browser alert popups) */
+#bookingModal .step-error { margin-top: 16px; padding: 12px 14px; border-radius: 12px; background: rgba(229, 72, 77, 0.08); border: 1px solid rgba(229, 72, 77, 0.35); font-weight: 500; }
+.pd-book__err { margin-top: 10px; text-align: center; }

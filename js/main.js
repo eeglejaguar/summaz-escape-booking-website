@@ -735,7 +735,7 @@ function renderStep3(body) {
 
 /* ── Step 4: Extras + Add-on interest ───────────────────── */
 const ADDON_LIST = [
-  { id: 'drone',    label: 'Drone Photos & Video',              note: '$45 · delivered same day',     tag: '$45' },
+  { id: 'drone',    label: 'Drone Photos & Video',              note: '$45 · delivered same day',     tag: 'Available' },
   { id: 'extra_js', label: 'Extra Jet Ski Time',                note: 'Priced on the day',            tag: 'Ask staff' },
   { id: 'lunch',    label: 'Lunch Package',                     note: 'At The Bay restaurant on-site',tag: 'On-site' },
   { id: 'transfer', label: 'Airport / Hotel Pickup or Drop-Off',note: 'Arranged via WhatsApp',        tag: 'WhatsApp' }

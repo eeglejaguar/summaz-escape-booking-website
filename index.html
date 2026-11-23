@@ -54,7 +54,10 @@
        HERO
        ══════════════════════════════════════════════════════ -->
   <section class="d-hero">
-    <img class="d-hero__bg" src="/assets/figma/hero-bg.webp" alt="" fetchpriority="high">
+    <picture>
+      <source media="(max-width: 640px)" srcset="/assets/figma/hero-bg-mobile.jpg">
+      <img class="d-hero__bg" src="/assets/figma/hero-bg.webp" alt="" fetchpriority="high">
+    </picture>
     <img class="d-hero__rider" src="/assets/figma/hero-rider.webp" alt="Jet ski rider at Arawak Cay" fetchpriority="high">
     <div class="d-wide d-hero__content">
       <h1 class="d-hero__title">Jet skis.<br>Open water.<br>All day.</h1>

@@ -698,7 +698,7 @@ function renderStep2(body) {
     </div>
     <p class="form-error" id="dateErr"></p>
     <p class="bk-hint">
-      <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9.25"/><path d="M12 7.5v5.5M12 16.25v.25"/></svg>
+      <svg class="bk-hint__info" viewBox="0 0 24 24" width="24" height="24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="12" fill="currentColor"/><circle cx="12" cy="12" r="6.25" stroke="#fff" stroke-width="1.25"/><path d="M12 11.25v3.5" stroke="#fff" stroke-width="1.25" stroke-linecap="round"/><circle cx="12" cy="9.1" r=".8" fill="#fff"/></svg>
       Dates are set in Nassau, Bahamas time. No timezone confusion.
     </p>
   `;
@@ -1371,21 +1371,29 @@ function escHtml(str) {
   obs.observe(hero);
 })();
 
-/* ── Floating Book Now: slide up between the hero and the closing CTA,
-   both of which already show their own Book Now button */
-(function() {
+/* ── Floating Book Now: only shows while no other Book Now button on the
+   page is on screen (hero, package cards, experience, closing CTA)
+   and the footer isn't in view.
+   The nav's Book Now is always visible, so it doesn't count. */
+document.addEventListener('DOMContentLoaded', () => {
   const fab = document.getElementById('bookFab');
-  const zones = [...document.querySelectorAll('.d-hero, .d-cta')];
-  if (!fab || !zones.length) return;
+  if (!fab) return;
+  /* Runs after the carousels clone their cards, so the clones are watched too */
+  const buttons = [...document.querySelectorAll('button.d-btn[onclick^="openBooking("]')]
+    .filter(b => !b.closest('.d-fab, .d-nav'));
+  /* Also stay hidden once the footer is on screen */
+  const footer = document.querySelector('.d-footer');
+  if (footer) buttons.push(footer);
+  if (!buttons.length) return;
   const inView = new Set();
   const obs = new IntersectionObserver(entries => {
     entries.forEach(e => e.isIntersecting ? inView.add(e.target) : inView.delete(e.target));
     const show = inView.size === 0;
     fab.classList.toggle('is-visible', show);
     fab.inert = !show;
-  }, { rootMargin: '0px 0px -120px 0px' });
-  zones.forEach(z => obs.observe(z));
-})();
+  }, { rootMargin: '-90px 0px 0px 0px' }); /* ignore buttons hidden under the nav pill */
+  buttons.forEach(b => obs.observe(b));
+});
 
 /* ── Testimonials column — duplicate for seamless loop ───── */
 (function() {
@@ -2024,7 +2032,7 @@ const PKG_DETAILS = {
 
 /* ── Icons ──────────────────────────────────────────────── */
 const PD_ICON = {
-  check:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 9.5 12 15l5.5-5.5"/></svg>',
+  check:   '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 12.5 10 16l7.5-8"/></svg>',
   chevron: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>',
   minus:   '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M6 12h12"/></svg>',
   plus:    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>',

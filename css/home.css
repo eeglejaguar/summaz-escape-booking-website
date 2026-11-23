@@ -958,7 +958,7 @@ body.d-page { padding-bottom: 0; }
   /* Hero: 980px tall, copy starts 126px down */
   .d-hero { height: 980px; }
   .d-hero__rider { display: none; }
-  .d-hero__bg { object-position: 42% center; }
+  .d-hero__bg { object-position: center; }
   .d-hero::after { content: none; }
   .d-hero__content { width: calc(100% - 40px); padding-top: 126px; }
   /* Narrow measure so "Open water." breaks onto two lines, as in the design */

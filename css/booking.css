@@ -333,6 +333,7 @@
   color: var(--bk-muted);
 }
 #bookingModal .bk-hint svg { color: #E5484D; flex-shrink: 0; }
+#bookingModal .bk-hint svg.bk-hint__info { color: var(--bk-sea); }
 
 /* Step 3 — form fields */
 #bookingModal .form-group { margin: 0; }
@@ -400,7 +401,10 @@
   place-items: center;
   color: var(--bk-sea);
   background: #fff;
+  transition: background-color .15s ease, color .15s ease;
 }
+/* Checked: solid blue box with a white tick */
+#bookingModal .bk-check.is-checked .bk-check__box { background: var(--bk-sea); color: #fff; }
 #bookingModal .bk-check__box svg { opacity: 0; transform: scale(.6); transition: opacity .15s ease, transform .15s ease; }
 #bookingModal .bk-check.is-checked .bk-check__box svg { opacity: 1; transform: none; }
 #bookingModal .bk-check__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px; }

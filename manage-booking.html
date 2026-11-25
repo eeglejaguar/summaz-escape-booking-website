@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="https://res.cloudinary.com/dko76z0df/image/upload/v1782304824/summaz/logo.png">
+  <link rel="apple-touch-icon" href="https://res.cloudinary.com/dko76z0df/image/upload/v1782304824/summaz/logo.png">
+  <title>Manage your booking - Summaz Escape</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&family=Urbanist:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/manage-booking.css">
+</head>
+<body>
+
+<div class="cx-overlay">
+  <div class="cx-modal" id="cxModal" data-screen="lookup" role="dialog" aria-modal="true" aria-labelledby="cxTitle-lookup">
+
+    <!-- ═══ 1. Manage your booking (lookup) ═══════════════════ -->
+    <section class="cx-screen is-active" data-screen="lookup">
+      <div class="cx-body">
+        <div class="cx-head">
+          <h1 class="cx-title" id="cxTitle-lookup">Manage your booking</h1>
+          <button type="button" class="cx-close" data-action="close" aria-label="Close">
+            <img src="/assets/figma/cx-close.svg" width="24" height="24" alt="">
+          </button>
+        </div>
+        <p class="cx-sub" style="margin-top:-8px">Enter your booking reference and the email you booked with. We'll email you a secure link to manage it.</p>
+
+        <form class="cx-form" id="cxLookupForm" novalidate>
+          <div class="cx-field">
+            <label class="cx-label" for="cxRef">Booking reference *</label>
+            <input class="cx-input" id="cxRef" name="reference" type="text" placeholder="SE-XXXXXXXXX" autocomplete="off" autocapitalize="characters" spellcheck="false">
+          </div>
+          <p class="cx-error" id="cxRefError">Enter a reference that starts with SE-.</p>
+          <div class="cx-hint">
+            <span class="cx-hint__icon"><img src="/assets/figma/cx-info.svg" width="16" height="16" alt=""></span>
+            <span class="cx-note">Starts with SE- and is in your confirmation email.</span>
+          </div>
+          <div class="cx-field">
+            <label class="cx-label" for="cxEmail">Email address <span class="req">*</span></label>
+            <input class="cx-input" id="cxEmail" name="email" type="email" placeholder="you@example.com" autocomplete="email">
+          </div>
+          <p class="cx-error" id="cxEmailError">Enter the email address you booked with.</p>
+          <button type="submit" hidden></button>
+        </form>
+        <p class="cx-sent" id="cxSent" role="status"></p>
+      </div>
+      <div class="cx-foot">
+        <p class="cx-foot__text">
+          The link works until your visit date.<br>
+          Questions? WhatsApp us at <a href="https://wa.me/12428175387" target="_blank" rel="noopener">+1 (242) 817-5387</a>.
+        </p>
+        <button type="button" class="cx-btn cx-btn--yellow cx-btn--tall" data-action="send-link">
+          Email me a secure link
+          <img src="/assets/figma/cx-arrow-right.svg" width="24" height="24" alt="">
+        </button>
+      </div>
+    </section>
+
+    <!-- ═══ 2. Your booking (cancellable) ════════════════════ -->
+    <section class="cx-screen" data-screen="booking">
+      <div class="cx-body">
+        <div class="cx-head">
+          <span class="cx-pill cx-pill--green">Confirmed</span>
+          <button type="button" class="cx-close" data-action="close" aria-label="Close">
+            <img src="/assets/figma/cx-close.svg" width="24" height="24" alt="">
+          </button>
+        </div>
+        <h1 class="cx-title">Your booking</h1>
+
+        <div class="cx-stack">
+          <div class="cx-titleblock">
+            <h2 class="cx-h3" data-bind="packageName"></h2>
+            <p class="cx-meta"><span data-bind="visitDate"></span> · Arrive 10am to 6pm</p>
+          </div>
+          <div class="cx-card">
+            <div data-bind-lines></div>
+            <div class="cx-rule"></div>
+            <div class="cx-row cx-row--total"><span>Total paid</span><span data-bind="totalPaid"></span></div>
+          </div>
+
+          <div class="cx-titleblock">
+            <h2 class="cx-h3">Cancel this booking</h2>
+            <div class="cx-hint">
+              <span class="cx-hint__icon"><img src="/assets/figma/cx-info.svg" width="16" height="16" alt=""></span>
+              <p class="cx-meta">You can cancel until <strong data-bind="deadline"></strong> Nassau time.</p>
+            </div>
+          </div>
+          <div class="cx-card">
+            <div class="cx-row"><span>Paid</span><span data-bind="totalPaid"></span></div>
+            <div class="cx-row"><span>Cancellation fee (<span data-bind="feePct"></span>)</span><span>−<span data-bind="fee"></span></span></div>
+            <div class="cx-rule"></div>
+            <div class="cx-row cx-row--total"><span>Refund to you</span><span data-bind="refund"></span></div>
+          </div>
+          <p class="cx-note">Refunds go back to the PayPal account or card you paid with,<br>usually within 5 to 10 business days.</p>
+        </div>
+      </div>
+      <div class="cx-foot">
+        <p class="cx-foot__text">Questions? <a href="mailto:booking@summazescape.com">booking@summazescape.com</a></p>
+        <div class="cx-foot__actions">
+          <button type="button" class="cx-btn cx-btn--white cx-btn--icon" data-goto="lookup">
+            <img src="/assets/figma/cx-arrow-left.svg" width="24" height="24" alt="">
+            Go Back
+          </button>
+          <button type="button" class="cx-btn cx-btn--ghost" data-goto="confirm">Cancel booking</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 3. Cancel this booking? (confirm) ════════════════ -->
+    <section class="cx-screen" data-screen="confirm">
+      <div class="cx-body">
+        <div class="cx-head">
+          <h1 class="cx-title">Cancel this booking?</h1>
+          <button type="button" class="cx-close" data-goto="booking" aria-label="Close">
+            <img src="/assets/figma/cx-close.svg" width="24" height="24" alt="">
+          </button>
+        </div>
+        <p class="cx-lead" style="margin-top:-8px">You'll get <span data-bind="refund"></span> back to the PayPal account or card you paid with.<br>The <span data-bind="fee"></span> fee isn't refunded, and this can't be undone.</p>
+        <div class="cx-summary"><span data-bind="visitDate"></span> · <span data-bind="packageName"></span> · <span data-bind="guests"></span> guests</div>
+      </div>
+      <div class="cx-foot">
+        <div class="cx-foot__actions cx-foot__actions--fill">
+          <button type="button" class="cx-btn cx-btn--white" data-goto="booking">Keep my booking</button>
+          <button type="button" class="cx-btn cx-btn--ghost" data-action="cancel" id="cxConfirmBtn"><span>Yes, cancel and refund <span data-bind="refund"></span></span></button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 4. Booking cancelled ═════════════════════════════ -->
+    <section class="cx-screen" data-screen="cancelled">
+      <div class="cx-body">
+        <div class="cx-head">
+          <span class="cx-pill cx-pill--red">Cancelled</span>
+          <button type="button" class="cx-close" data-action="close" aria-label="Close">
+            <img src="/assets/figma/cx-close.svg" width="24" height="24" alt="">
+          </button>
+        </div>
+        <h1 class="cx-title">Booking cancelled</h1>
+        <p class="cx-lead">Your <strong data-bind="refund"></strong> refund is on its way to the PayPal account or card you paid with. It usually arrives within 5 to 10 business days.</p>
+
+        <div class="cx-stack">
+          <div class="cx-card">
+            <div class="cx-row"><span>Reference</span><span data-bind="reference"></span></div>
+            <div class="cx-row"><span>Visit date</span><span data-bind="visitDate"></span></div>
+            <div class="cx-row"><span>Cancelled on</span><span data-bind="cancelledOn"></span></div>
+            <div class="cx-row"><span>Refunded</span><span data-bind="refund"></span></div>
+            <div class="cx-row"><span>Fee kept (<span data-bind="feePct"></span>)</span><span data-bind="fee"></span></div>
+            <div class="cx-row"><span>PayPal refund ID</span><span data-bind="refundId"></span></div>
+          </div>
+          <p class="cx-note">We've emailed you a copy of this</p>
+        </div>
+      </div>
+      <div class="cx-foot cx-foot--end">
+        <div class="cx-foot__actions">
+          <a class="cx-btn cx-btn--white cx-btn--icon" href="/">
+            <img src="/assets/figma/cx-arrow-left.svg" width="24" height="24" alt="">
+            Back to home
+          </a>
+          <a class="cx-btn cx-btn--yellow" href="/book">Book another day</a>
+        </div>
+      </div>
+    </section>
+
+    <!-- ═══ 5. Your booking (past cancellation deadline) ═════ -->
+    <section class="cx-screen" data-screen="locked">
+      <div class="cx-body">
+        <div class="cx-head">
+          <span class="cx-pill cx-pill--green">Confirmed</span>
+          <button type="button" class="cx-close" data-action="close" aria-label="Close">
+            <img src="/assets/figma/cx-close.svg" width="24" height="24" alt="">
+          </button>
+        </div>
+        <h1 class="cx-title">Your booking</h1>
+
+        <div class="cx-stack">
+          <div class="cx-titleblock">
+            <h2 class="cx-h3" data-bind="packageName"></h2>
+            <p class="cx-meta"><span data-bind="visitDate"></span> · Arrive 10am to 6pm</p>
+          </div>
+          <div class="cx-card">
+            <div class="cx-rule"></div>
+            <div class="cx-row cx-row--total"><span>Total paid</span><span data-bind="totalPaid"></span></div>
+          </div>
+          <div class="cx-locked">
+            <div class="cx-locked__head">
+              <span class="cx-locked__icon"><img src="/assets/figma/cx-lock.svg" width="20" height="20" alt=""></span>
+              <h2 class="cx-h3">This booking can no longer be cancelled</h2>
+            </div>
+            <p>The cancellation deadline was <strong data-bind="deadline"></strong> Nassau time. Bookings can't be cancelled within 7 days of the visit. If we have to cancel because of weather or sea conditions, you'll get a full refund.</p>
+          </div>
+        </div>
+      </div>
+      <div class="cx-foot">
+        <p class="cx-foot__text">
+          Questions? Email <a href="mailto:booking@summazescape.com">booking@summazescape.com</a><br>
+          or WhatsApp <a href="https://wa.me/12428175387" target="_blank" rel="noopener">+1 (242) 817-5387</a>
+        </p>
+        <button type="button" class="cx-btn cx-btn--yellow cx-btn--tall" data-goto="lookup">
+          Email me a secure link
+          <img src="/assets/figma/cx-arrow-right.svg" width="24" height="24" alt="">
+        </button>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<script>
+/* ------------------------------------------------------------
+   Manage / cancel booking — front-end flow.
+   BOOKING is sample data matching the Figma design. Replace
+   loadBooking() / requestLink() / cancelBooking() with real API
+   calls once the manage-booking endpoints exist.
+   ------------------------------------------------------------ */
+(function () {
+  var FEE_RATE = 0.20;
+
+  var BOOKING = {
+    reference:   'SE-7KQ2MZ4R',
+    packageName: 'Beach Access Package + Jet Ski Ride',
+    visitDate:   'Sat, Nov 28, 2026',
+    guests:      4,
+    deadline:    'Fri, Nov 20, 11:59 PM',
+    cancellable: true,
+    lines: [
+      { label: '2 × Beach + Jet Ski',  amount: 300 },
+      { label: '1 × Beach adult',      amount: 75  },
+      { label: '1 × Beach child',      amount: 60  },
+      { label: 'Big Mable, 2 riders',  amount: 90  }
+    ],
+    cancelledOn: 'Wed, Nov 18, 3:42 PM',
+    refundId:    '[REFUND ID]'
+  };
+
+  var modal = document.getElementById('cxModal');
+  var money = function (n) { return '$' + n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ','); };
+  var esc = function (s) { return String(s).replace(/[&<>"']/g, function (c) { return { '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]; }); };
+
+  function render(b) {
+    var total  = b.lines.reduce(function (s, l) { return s + l.amount; }, 0);
+    var fee    = Math.round(total * FEE_RATE * 100) / 100;
+    var values = {
+      reference: b.reference, packageName: b.packageName, visitDate: b.visitDate,
+      guests: b.guests, deadline: b.deadline, cancelledOn: b.cancelledOn, refundId: b.refundId,
+      totalPaid: money(total), fee: money(fee), refund: money(total - fee),
+      feePct: Math.round(FEE_RATE * 100) + '%'
+    };
+    document.querySelectorAll('[data-bind]').forEach(function (el) {
+      var v = values[el.getAttribute('data-bind')];
+      if (v !== undefined) el.textContent = v;
+    });
+    document.querySelectorAll('[data-bind-lines]').forEach(function (el) {
+      el.outerHTML = b.lines.map(function (l) {
+        return '<div class="cx-row"><span>' + esc(l.label) + '</span><span>' + money(l.amount) + '</span></div>';
+      }).join('');
+    });
+  }
+
+  function show(screen) {
+    modal.setAttribute('data-screen', screen);
+    modal.setAttribute('aria-labelledby', '');
+    document.querySelectorAll('.cx-screen').forEach(function (s) {
+      var on = s.getAttribute('data-screen') === screen;
+      s.classList.toggle('is-active', on);
+      if (on) {
+        var body = s.querySelector('.cx-body'); if (body) body.scrollTop = 0;
+        var h = s.querySelector('.cx-title'); if (h) { h.id = h.id || 'cxTitle-' + screen; modal.setAttribute('aria-labelledby', h.id); }
+      }
+    });
+    var url = new URL(location.href);
+    url.searchParams.set('step', screen);
+    history.replaceState(null, '', url);
+    fit();
+  }
+
+  /* Scale the Figma-sized frame uniformly so it always fits the
+     viewport with a margin — same proportions as the design, no scroll. */
+  /* One zoom for every screen (so moving between steps never jumps size):
+     sized so the tallest screen's real content fits the viewport. Empty
+     frame space is trimmed to the viewport rather than shrinking text. */
+  var FRAME_W = 792, MARGIN = 64, MIN_ZOOM = 0.55;
+  var screens = Array.prototype.slice.call(document.querySelectorAll('.cx-screen'));
+  function contentHeight() {
+    var active = screens.filter(function (s) { return s.classList.contains('is-active'); })[0];
+    var max = 0;
+    modal.style.height = 'auto';
+    screens.forEach(function (s) {
+      screens.forEach(function (x) { x.classList.toggle('is-active', x === s); });
+      max = Math.max(max, modal.offsetHeight);
+    });
+    screens.forEach(function (x) { x.classList.toggle('is-active', x === active); });
+    return max + 12;
+  }
+  function fit() {
+    modal.style.zoom = '';
+    modal.style.height = '';
+    if (window.innerWidth <= 640) return;
+    var frameH = parseFloat(getComputedStyle(modal).getPropertyValue('--cx-h')) || 1130;
+    var natural = contentHeight();
+    var avail = window.innerHeight - MARGIN;
+    var s = Math.max(MIN_ZOOM, Math.min(1, (window.innerWidth - MARGIN) / FRAME_W, avail / natural));
+    modal.style.zoom = s.toFixed(4);
+    modal.style.height = Math.min(frameH, avail / s) + 'px';
+  }
+  window.addEventListener('resize', fit);
+
+  /* ── Lookup form ─────────────────────────────────────── */
+  var refEl = document.getElementById('cxRef');
+  var emailEl = document.getElementById('cxEmail');
+  function validate() {
+    var ref = refEl.value.trim().toUpperCase();
+    var email = emailEl.value.trim();
+    var refOk = /^SE-[A-Z0-9]{4,}$/.test(ref);
+    var emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    refEl.classList.toggle('is-invalid', !refOk);
+    emailEl.classList.toggle('is-invalid', !emailOk);
+    document.getElementById('cxRefError').classList.toggle('is-visible', !refOk);
+    document.getElementById('cxEmailError').classList.toggle('is-visible', !emailOk);
+    return refOk && emailOk ? { reference: ref, email: email } : null;
+  }
+  [refEl, emailEl].forEach(function (el) {
+    el.addEventListener('input', function () {
+      el.classList.remove('is-invalid');
+      var err = el.parentNode.nextElementSibling;
+      if (err && err.classList.contains('cx-error')) err.classList.remove('is-visible');
+    });
+  });
+
+  function requestLink() {
+    var data = validate();
+    if (!data) return;
+    var btn = document.querySelector('[data-action="send-link"]');
+    btn.disabled = true;
+    // TODO: POST data to the manage-booking endpoint so it emails a signed link.
+    setTimeout(function () {
+      btn.disabled = false;
+      var sent = document.getElementById('cxSent');
+      sent.textContent = 'If ' + data.reference + ' matches ' + data.email + ', a secure link is on its way. Check your inbox.';
+      sent.classList.add('is-visible');
+    }, 500);
+  }
+
+  function cancelBooking() {
+    var btn = document.getElementById('cxConfirmBtn');
+    btn.disabled = true;
+    // TODO: POST to the cancel endpoint, then use its cancelledOn / refundId.
+    setTimeout(function () { btn.disabled = false; show('cancelled'); }, 500);
+  }
+
+  document.getElementById('cxLookupForm').addEventListener('submit', function (e) { e.preventDefault(); requestLink(); });
+  document.addEventListener('click', function (e) {
+    var t = e.target.closest('[data-goto],[data-action]');
+    if (!t) return;
+    var go = t.getAttribute('data-goto');
+    if (go) return show(go);
+    switch (t.getAttribute('data-action')) {
+      case 'close':     location.href = '/'; break;
+      case 'send-link': requestLink(); break;
+      case 'cancel':    cancelBooking(); break;
+    }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') location.href = '/';
+  });
+
+  /* ── Initial screen ──────────────────────────────────────
+     ?step=lookup|booking|confirm|cancelled|locked
+     A secure-link visit (?ref=…&token=…) lands on the booking. */
+  render(BOOKING);
+  var params = new URLSearchParams(location.search);
+  var step = params.get('step');
+  if (!step && params.get('token')) step = BOOKING.cancellable ? 'booking' : 'locked';
+  if (['lookup', 'booking', 'confirm', 'cancelled', 'locked'].indexOf(step) === -1) step = 'lookup';
+  if (params.get('ref')) refEl.value = params.get('ref');
+  show(step);
+})();
+</script>
+</body>
+</html>

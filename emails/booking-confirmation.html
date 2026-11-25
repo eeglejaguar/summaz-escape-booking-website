@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="x-apple-disable-message-reformatting">
+  <meta name="color-scheme" content="light">
+  <title>You're booked: {{visitDateShort}}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <!--
+    Summaz Escape — booking confirmation email (Figma: "Cancellation Email").
+    Placeholders: {{firstName}} {{reference}} {{visitDate}} {{visitDateShort}}
+                  {{packageLine1}} {{packageLine2}} {{totalPaid}} {{cancelDeadline}}
+                  {{manageUrl}} {{directionsUrl}} {{calendarUrl}} {{whatToBringUrl}}
+    {{manageUrl}} should point to /manage-booking.html?ref={{reference}}&token=<signed token>
+  -->
+  <style>
+    body { margin: 0; padding: 0; background: #F3F4F6; }
+    a { text-decoration: underline; }
+    @media (max-width: 620px) {
+      .wrap { width: 100% !important; }
+      .px { padding-left: 20px !important; padding-right: 20px !important; }
+      .h1 { font-size: 26px !important; line-height: 32px !important; }
+      .btn-cell { display: block !important; width: 100% !important; padding: 0 0 12px 0 !important; }
+      .brand { font-size: 20px !important; }
+    }
+  </style>
+</head>
+<body style="margin:0;padding:0;background:#F3F4F6;">
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Your beach day at Arawak Cay is set. Show this email at check-in.</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#F3F4F6;">
+    <tr>
+      <td align="center" style="padding:24px 0;">
+        <table role="presentation" class="wrap" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background:#FFFFFF;font-family:'Visby CF','Urbanist',Helvetica,Arial,sans-serif;">
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#031D2F;height:100px;padding:0 24px;" class="px">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td class="brand" style="font-size:24px;font-weight:700;color:#FFFFFF;line-height:24px;">Summaz Escape</td>
+                  <td align="right" style="font-size:16px;font-weight:600;line-height:24px;color:#FFFFFF;white-space:nowrap;">
+                    <span style="opacity:.6;color:#FFFFFF;">Ref:</span>&nbsp;&nbsp;{{reference}}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr><td style="background:#01A9CE;height:2px;line-height:2px;font-size:0;">&nbsp;</td></tr>
+
+          <!-- Body -->
+          <tr>
+            <td class="px" style="padding:38px 24px 32px;">
+
+              <!-- Status pill -->
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="background:#EBF6EE;border-radius:99px;padding:12px 20px;font-size:16px;font-weight:600;line-height:24px;color:#34A851;">Confirmed</td>
+                </tr>
+              </table>
+
+              <!-- Title -->
+              <h1 class="h1" style="margin:24px 0 0;font-size:32px;font-weight:700;line-height:32px;color:#031D2F;">You're booked, {{firstName}}!</h1>
+              <p style="margin:8px 0 0;font-size:16px;font-weight:500;line-height:24px;color:#4B5563;">Your beach day at Arawak Cay is set. Show this email at check-in.</p>
+
+              <!-- Booking summary -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;border:1px solid #CDD1D7;">
+                <tr>
+                  <td style="padding:25px 24px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="font-size:16px;line-height:24px;">
+                      <tr>
+                        <td style="padding:0 0 10px;font-weight:500;color:#4B5563;">Reference</td>
+                        <td align="right" style="padding:0 0 10px;font-weight:700;color:#031D2F;">{{reference}}</td>
+                      </tr>
+                      <tr><td colspan="2" style="border-top:1px solid #D9D9D9;font-size:0;line-height:0;padding:0 0 10px;">&nbsp;</td></tr>
+                      <tr>
+                        <td style="padding:0 0 10px;font-weight:500;color:#4B5563;">Visit</td>
+                        <td align="right" style="padding:0 0 10px;font-weight:600;color:#031D2F;">{{visitDate}}</td>
+                      </tr>
+                      <tr><td colspan="2" style="border-top:1px solid #D9D9D9;font-size:0;line-height:0;padding:0 0 10px;">&nbsp;</td></tr>
+                      <tr>
+                        <td valign="middle" style="padding:0 0 10px;font-weight:500;color:#4B5563;">Package</td>
+                        <td align="right" style="padding:0 0 10px;font-weight:600;color:#031D2F;">{{packageLine1}}<br>{{packageLine2}}</td>
+                      </tr>
+                      <tr><td colspan="2" style="border-top:1px solid #031D2F;font-size:0;line-height:0;padding:0 0 10px;">&nbsp;</td></tr>
+                      <tr>
+                        <td style="font-weight:800;color:#4B5563;">Paid</td>
+                        <td align="right" style="font-weight:800;color:#031D2F;">{{totalPaid}}</td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Getting there -->
+              <h2 style="margin:24px 0 0;font-size:24px;font-weight:700;line-height:32px;color:#031D2F;">Getting there</h2>
+              <p style="margin:8px 0 0;font-size:16px;font-weight:500;line-height:24px;color:#4B5563;">Arrive any time from 10am to 6pm at The Bay, Arawak Cay. Look for the gated beach entrance with the orange picket fence. <a href="{{whatToBringUrl}}" style="color:#01A9CE;">See what to bring</a></p>
+
+              <!-- Buttons -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+                <tr>
+                  <td class="btn-cell" width="50%" style="padding-right:8px;">
+                    <a href="{{directionsUrl}}" style="display:block;background:#FDDB24;border:1px solid #FDDB24;border-radius:40px;padding:16px 20px;text-align:center;font-size:16px;font-weight:600;line-height:20px;color:#031D2F;text-decoration:none;">Get directions</a>
+                  </td>
+                  <td class="btn-cell" width="50%" style="padding-left:8px;">
+                    <a href="{{calendarUrl}}" style="display:block;background:#FFFFFF;border:1px solid #031D2F;border-radius:40px;padding:16px 20px;text-align:center;font-size:16px;font-weight:600;line-height:20px;color:#031D2F;text-decoration:none;">Add to calendar</a>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Upsell -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+                <tr>
+                  <td style="background:#E6F6FA;border-radius:12px;padding:24px;">
+                    <p style="margin:0;font-size:24px;font-weight:700;line-height:32px;color:#031D2F;">Get your day on camera</p>
+                    <p style="margin:8px 0 0;font-size:16px;font-weight:500;line-height:24px;color:#4B5563;">Drone Photos &amp; Video, $45, delivered to your phone the same day. Just ask the crew at check-in.</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Manage booking -->
+              <p style="margin:24px 0 0;font-size:16px;font-weight:500;line-height:24px;color:#4B5563;">Plans changed? You can manage your booking online until {{cancelDeadline}} Nassau time for an 80% refund. After that, your spot is locked in.</p>
+              <p style="margin:16px 0 0;font-size:20px;font-weight:700;line-height:24px;"><a href="{{manageUrl}}" style="color:#01A9CE;">Manage booking</a></p>
+
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="px" style="background:#031D2F;padding:32px 24px;font-size:12px;font-weight:600;line-height:20px;">
+              <p style="margin:0;color:#FFFFFF;">
+                <a href="https://www.instagram.com/summaz_escape/" style="color:#FFFFFF;text-decoration:none;">Instagram</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <a href="https://www.facebook.com/share/1Dr89qNhrU/" style="color:#FFFFFF;text-decoration:none;">Facebook</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <a href="https://www.tiktok.com/@10summaz5" style="color:#FFFFFF;text-decoration:none;">TikTok</a>
+              </p>
+              <p style="margin:12px 0 0;color:#9AA5AC;">Summaz Escape&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;The Bay, Arawak Cay, Nassau, Bahamas</p>
+              <p style="margin:12px 0 0;color:#9AA5AC;">
+                <a href="mailto:booking@summazescape.com" style="color:#9AA5AC;">booking@summazescape.com</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <a href="tel:+12428175387" style="color:#9AA5AC;text-decoration:none;">+1 (242) 817-5387</a>
+              </p>
+              <p style="margin:12px 0 0;color:#9AA5AC;">
+                <a href="https://summazescape.com/refunds-and-cancellation.html" style="color:#9AA5AC;">Cancellation policy</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <a href="https://summazescape.com/terms-and-conditions.html" style="color:#9AA5AC;">Terms</a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;
+                <a href="https://summazescape.com/privacy-policy.html" style="color:#9AA5AC;">Privacy</a>
+              </p>
+              <p style="margin:12px 0 0;font-size:10px;line-height:18px;color:#68777F;">You're receiving this because you booked a visit at Summaz Escape. This is a transactional email about your booking.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
